@@ -15,6 +15,17 @@
 <!-- ============ LOCK SCREEN ============ -->
 <div id="lock-screen" class="screen">
   <div class="lock-card">
+    <button type="button" class="icon-btn qr-share-btn" id="qr-share-btn" title="Share app link as QR code" aria-label="Share app link as QR code">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6">
+        <rect x="3" y="3" width="6" height="6" rx="1"></rect>
+        <rect x="15" y="3" width="6" height="6" rx="1"></rect>
+        <rect x="3" y="15" width="6" height="6" rx="1"></rect>
+        <rect x="15" y="15" width="2" height="2" fill="currentColor" stroke="none"></rect>
+        <rect x="19" y="15" width="2" height="2" fill="currentColor" stroke="none"></rect>
+        <rect x="15" y="19" width="2" height="2" fill="currentColor" stroke="none"></rect>
+        <rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"></rect>
+      </svg>
+    </button>
     <div class="brand-mark">
       <img src="icons/icon-192.png" alt="Cypher" class="brand-logo">
       <h1>Cypher</h1>
@@ -23,42 +34,36 @@
 
     <!-- First-run setup -->
     <div id="setup-view" hidden>
-      <h2>Create your passcode</h2>
-      <p class="hint">This unlocks Cypher on this device. Nothing leaves your device.</p>
-      <form id="setup-form" autocomplete="off">
-        <label class="field">
-          <span>New passcode</span>
-          <input type="password" id="setup-password" minlength="4" required placeholder="At least 4 characters">
-        </label>
-        <label class="field">
-          <span>Confirm passcode</span>
-          <input type="password" id="setup-password-confirm" minlength="4" required placeholder="Re-enter passcode">
-        </label>
-        <label class="checkbox-field" id="setup-biometric-row" hidden>
-          <input type="checkbox" id="setup-biometric" checked>
-          <span>Also enable fingerprint / Face unlock on this device</span>
-        </label>
-        <p class="error" id="setup-error" hidden></p>
-        <button type="submit" class="btn primary">Create &amp; Enter Cypher</button>
-      </form>
+      <h2>Set up Cypher</h2>
+      <p class="hint">Cypher unlocks with your fingerprint or face. Nothing leaves your device.</p>
+      <p class="error" id="setup-unsupported" hidden>
+        This device or browser doesn't support fingerprint/Face unlock, so Cypher can't be set up here.
+        Try again on a device with fingerprint or face recognition enabled.
+      </p>
+      <button type="button" class="btn primary" id="setup-biometric-btn">Enable Fingerprint / Face Unlock</button>
+      <p class="error" id="setup-error" hidden></p>
     </div>
 
     <!-- Returning-user login -->
     <div id="login-view" hidden>
       <h2>Welcome back</h2>
-      <button type="button" class="btn primary" id="biometric-btn" hidden>
-        <span class="icon">🫆</span> Unlock with Fingerprint / Face
-      </button>
-      <form id="login-form" autocomplete="off">
-        <label class="field">
-          <span>Passcode</span>
-          <input type="password" id="login-password" required placeholder="Enter your passcode">
-        </label>
-        <p class="error" id="login-error" hidden></p>
-        <button type="submit" class="btn secondary">Unlock</button>
-      </form>
-      <button type="button" class="link-btn" id="forgot-btn">Forgot passcode? Reset app</button>
+      <button type="button" class="btn primary" id="biometric-btn">Unlock with Fingerprint / Face</button>
+      <p class="error" id="login-error" hidden></p>
+      <button type="button" class="link-btn" id="reset-btn">Reset Cypher (requires fingerprint)</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ QR SHARE MODAL ============ -->
+<div id="qr-modal" class="modal-overlay" hidden>
+  <div class="modal-card">
+    <button type="button" class="icon-btn modal-close" id="qr-modal-close" aria-label="Close">✕</button>
+    <h2>Share Cypher</h2>
+    <p class="hint">Scan this with another phone's camera to open this link there.</p>
+    <div class="qr-canvas-wrap"><canvas id="qr-canvas"></canvas></div>
+    <p class="qr-link-text" id="qr-link-text"></p>
+    <button type="button" class="btn secondary" id="qr-copy-btn">Copy Link</button>
+    <p class="hint">Data isn't shared — each device keeps its own to-dos, goals, and finances locally.</p>
   </div>
 </div>
 
@@ -263,6 +268,7 @@
   </main>
 </div>
 
+<script src="qrcode.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -43,6 +43,7 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 .lock-card {
+  position: relative;
   width: 100%;
   max-width: 380px;
   background: var(--card);
@@ -50,6 +51,72 @@ button, input, select, textarea { font-family: inherit; }
   border-radius: var(--radius);
   padding: 28px 24px 32px;
   box-shadow: var(--shadow);
+}
+
+.qr-share-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+/* ---------- QR share modal ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 12, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 26px 22px 22px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.modal-card h2 {
+  font-size: 17px;
+  margin: 0 0 6px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+}
+
+.qr-canvas-wrap {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 14px;
+  display: inline-flex;
+  margin: 14px 0;
+}
+
+.qr-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+}
+
+.qr-link-text {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  word-break: break-all;
+  margin: 0 0 16px;
 }
 
 .brand-mark {
@@ -352,30 +419,38 @@ input:focus, select:focus {
   padding: 12px 14px;
 }
 
-.reorder-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.drag-handle {
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
-}
-
-.reorder-btn {
-  width: 26px;
-  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
   color: var(--text-dim);
-  border-radius: 6px;
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
-.reorder-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
-.reorder-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.drag-handle:hover { color: var(--text); }
+
+.list-item.dragging {
+  position: relative;
+  z-index: 20;
+  background: var(--card-hover);
+  box-shadow: var(--shadow);
+  cursor: grabbing;
+  transition: none;
+  user-select: none;
+}
+
+#todo-list.reordering .list-item:not(.dragging) {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
 
 .list-item input[type="checkbox"] {
   width: 20px;

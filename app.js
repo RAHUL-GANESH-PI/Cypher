@@ -24,35 +24,11 @@ const Store = {
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
 
 /* =========================================================
-   AUTH
+   AUTH — fingerprint / Face unlock only, no passcode
    ========================================================= */
-const AUTH_HASH_KEY = 'cypher_auth_hash';
 const WEBAUTHN_CRED_KEY = 'cypher_webauthn_credential';
 const SESSION_KEY = 'cypher_session_unlocked';
-
-async function sha256Hex(text) {
-  const enc = new TextEncoder().encode(text);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function randomHex(bytes) {
-  const arr = crypto.getRandomValues(new Uint8Array(bytes));
-  return [...arr].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function setPassword(password) {
-  const salt = randomHex(16);
-  const hash = await sha256Hex(salt + password);
-  Store.set(AUTH_HASH_KEY, { salt, hash });
-}
-
-async function verifyPassword(password) {
-  const stored = Store.get(AUTH_HASH_KEY, null);
-  if (!stored) return false;
-  const hash = await sha256Hex(stored.salt + password);
-  return hash === stored.hash;
-}
+const LEGACY_AUTH_HASH_KEY = 'cypher_auth_hash'; // no longer used; cleared on next successful unlock
 
 async function biometricAvailable() {
   if (!window.PublicKeyCredential || !navigator.credentials) return false;
@@ -107,28 +83,30 @@ const setupView = document.getElementById('setup-view');
 const loginView = document.getElementById('login-view');
 
 async function initAuthScreen() {
-  const hasPassword = !!Store.get(AUTH_HASH_KEY, null);
-  if (sessionStorage.getItem(SESSION_KEY) === '1' && hasPassword) {
+  const hasBiometric = !!Store.get(WEBAUTHN_CRED_KEY, null);
+
+  if (sessionStorage.getItem(SESSION_KEY) === '1' && hasBiometric) {
     enterApp();
     return;
   }
 
-  if (!hasPassword) {
+  if (!hasBiometric) {
     setupView.hidden = false;
     loginView.hidden = true;
     const bioAvailable = await biometricAvailable();
-    document.getElementById('setup-biometric-row').hidden = !bioAvailable;
+    document.getElementById('setup-biometric-btn').hidden = !bioAvailable;
+    document.getElementById('setup-unsupported').hidden = bioAvailable;
   } else {
     setupView.hidden = true;
     loginView.hidden = false;
-    const hasBiometric = !!Store.get(WEBAUTHN_CRED_KEY, null);
-    const bioAvailable = hasBiometric && (await biometricAvailable());
-    document.getElementById('biometric-btn').hidden = !bioAvailable;
+    const bioAvailable = await biometricAvailable();
     if (bioAvailable) {
       // Kick off the fingerprint/Face prompt right away — no extra tap needed.
-      // If it fails or is cancelled, the passcode field and the button both
-      // stay available so the user can retry or fall back to typing.
       attemptBiometricAuth();
+    } else {
+      const errorEl = document.getElementById('login-error');
+      errorEl.textContent = "Fingerprint/Face unlock isn't available right now on this device or browser.";
+      errorEl.hidden = false;
     }
   }
 }
@@ -139,62 +117,28 @@ async function attemptBiometricAuth() {
     const ok = await loginWithBiometric();
     if (ok) {
       errorEl.hidden = true;
+      localStorage.removeItem(LEGACY_AUTH_HASH_KEY);
       sessionStorage.setItem(SESSION_KEY, '1');
       enterApp();
     }
   } catch (err) {
     console.warn(err);
-    errorEl.textContent = 'Biometric unlock failed or was cancelled. Use your passcode, or tap the button to try again.';
+    errorEl.textContent = 'Fingerprint/Face unlock failed or was cancelled. Tap the button to try again.';
     errorEl.hidden = false;
   }
 }
 
-document.getElementById('setup-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const pw = document.getElementById('setup-password').value;
-  const confirm = document.getElementById('setup-password-confirm').value;
+document.getElementById('setup-biometric-btn').addEventListener('click', async () => {
   const errorEl = document.getElementById('setup-error');
   errorEl.hidden = true;
-
-  if (pw.length < 4) {
-    errorEl.textContent = 'Passcode must be at least 4 characters.';
-    errorEl.hidden = false;
-    return;
-  }
-  if (pw !== confirm) {
-    errorEl.textContent = 'Passcodes do not match.';
-    errorEl.hidden = false;
-    return;
-  }
-
-  await setPassword(pw);
-
-  const wantsBiometric = document.getElementById('setup-biometric').checked;
-  const bioRowVisible = !document.getElementById('setup-biometric-row').hidden;
-  if (wantsBiometric && bioRowVisible) {
-    try {
-      await registerBiometric();
-    } catch (err) {
-      console.warn('Biometric enrollment skipped:', err);
-    }
-  }
-
-  sessionStorage.setItem(SESSION_KEY, '1');
-  enterApp();
-});
-
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const pw = document.getElementById('login-password').value;
-  const errorEl = document.getElementById('login-error');
-  const ok = await verifyPassword(pw);
-  if (ok) {
-    errorEl.hidden = true;
+  try {
+    await registerBiometric();
+    localStorage.removeItem(LEGACY_AUTH_HASH_KEY);
     sessionStorage.setItem(SESSION_KEY, '1');
-    document.getElementById('login-password').value = '';
     enterApp();
-  } else {
-    errorEl.textContent = 'Incorrect passcode. Try again.';
+  } catch (err) {
+    console.warn(err);
+    errorEl.textContent = 'Fingerprint/Face setup failed or was cancelled. Tap the button to try again.';
     errorEl.hidden = false;
   }
 });
@@ -203,11 +147,22 @@ document.getElementById('biometric-btn').addEventListener('click', () => {
   attemptBiometricAuth();
 });
 
-document.getElementById('forgot-btn').addEventListener('click', () => {
+document.getElementById('reset-btn').addEventListener('click', async () => {
   const sure = confirm(
-    'Resetting will permanently erase ALL Cypher data on this device (to-dos, goals, finances, passcode) so you can start over. This cannot be undone. Continue?'
+    'Resetting will permanently erase ALL Cypher data on this device (to-dos, goals, finances, and your fingerprint setup) so you can start over. This cannot be undone. Continue?'
   );
   if (!sure) return;
+
+  const errorEl = document.getElementById('login-error');
+  try {
+    const ok = await loginWithBiometric();
+    if (!ok) return;
+  } catch (err) {
+    console.warn(err);
+    errorEl.textContent = 'Fingerprint/Face check failed or was cancelled. Reset was not performed.';
+    errorEl.hidden = false;
+    return;
+  }
   localStorage.clear();
   sessionStorage.clear();
   location.reload();
@@ -226,6 +181,46 @@ function enterApp() {
   renderTxns();
   renderHoldings();
 }
+
+/* =========================================================
+   QR SHARE (lock screen) — lets someone else scan this app's own
+   link and open it on their phone. Generated fully on-device.
+   ========================================================= */
+document.getElementById('qr-share-btn').addEventListener('click', () => {
+  const url = location.origin + location.pathname;
+  const canvas = document.getElementById('qr-canvas');
+  try {
+    QR.renderToCanvas(canvas, url, { size: 220 });
+    document.getElementById('qr-link-text').textContent = url;
+    document.getElementById('qr-modal').hidden = false;
+  } catch (err) {
+    console.warn('QR generation failed:', err);
+    alert("Couldn't generate a QR code for this link.");
+  }
+});
+
+document.getElementById('qr-modal-close').addEventListener('click', () => {
+  document.getElementById('qr-modal').hidden = true;
+});
+
+document.getElementById('qr-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'qr-modal') document.getElementById('qr-modal').hidden = true;
+});
+
+document.getElementById('qr-copy-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('qr-copy-btn');
+  const url = document.getElementById('qr-link-text').textContent;
+  const original = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.textContent = 'Copied!';
+  } catch {
+    btn.textContent = 'Copy failed — select the text above';
+  }
+  setTimeout(() => {
+    btn.textContent = original;
+  }, 1800);
+});
 
 /* =========================================================
    TAB NAVIGATION
@@ -308,24 +303,24 @@ function renderTodos() {
     ? 'Nothing here yet for today — add a task above, or copy yesterday\'s list.'
     : 'No tasks were recorded for this date.';
 
-  // Tasks display in the order they're stored (not by date added), so manual
-  // reordering below sticks. Reorder arrows only show under the "All" filter,
-  // since that's the only view where their up/down movement is unambiguous.
+  // Tasks display in the order they're stored (not by date added), so drag
+  // reordering below sticks. The drag handle only shows under the "All"
+  // filter, since that's the only view where its position is unambiguous.
   const canReorder = todoFilter === 'all';
 
   filtered.forEach((t) => {
-    const dayIndex = dayTodos.indexOf(t);
-    const isFirst = dayIndex === 0;
-    const isLast = dayIndex === dayTodos.length - 1;
-
     const li = document.createElement('li');
     li.className = 'list-item' + (t.done ? ' done' : '');
+    li.dataset.id = t.id;
     li.innerHTML = `
       ${canReorder ? `
-      <div class="reorder-btns">
-        <button class="reorder-btn" data-id="${t.id}" data-dir="up" ${isFirst ? 'disabled' : ''} aria-label="Move up">▲</button>
-        <button class="reorder-btn" data-id="${t.id}" data-dir="down" ${isLast ? 'disabled' : ''} aria-label="Move down">▼</button>
-      </div>` : ''}
+      <button class="drag-handle" data-id="${t.id}" aria-label="Drag to reorder" title="Drag to reorder">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle>
+          <circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle>
+          <circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle>
+        </svg>
+      </button>` : ''}
       <input type="checkbox" ${t.done ? 'checked' : ''} data-id="${t.id}" class="todo-check">
       <span class="item-text">${escapeHtml(t.text)}</span>
       <button class="item-delete" data-id="${t.id}" title="Delete">🗑</button>
@@ -334,22 +329,102 @@ function renderTodos() {
   });
 }
 
-function moveTodo(id, direction) {
+// Moves a task to an arbitrary position within its day's list (used by drag reordering).
+function moveTodoToIndex(id, newPosInDay) {
   const dayIndices = todos
     .map((t, i) => ({ t, i }))
     .filter((x) => todoDateOf(x.t) === viewDate)
     .map((x) => x.i);
 
-  const posInDay = dayIndices.findIndex((i) => todos[i].id === id);
-  if (posInDay === -1) return;
+  const curPos = dayIndices.findIndex((i) => todos[i].id === id);
+  if (curPos === -1) return;
 
-  const swapPos = direction === 'up' ? posInDay - 1 : posInDay + 1;
-  if (swapPos < 0 || swapPos >= dayIndices.length) return;
+  newPosInDay = Math.max(0, Math.min(dayIndices.length - 1, newPosInDay));
+  if (newPosInDay === curPos) return;
 
-  const idxA = dayIndices[posInDay];
-  const idxB = dayIndices[swapPos];
-  [todos[idxA], todos[idxB]] = [todos[idxB], todos[idxA]];
+  const [item] = todos.splice(dayIndices[curPos], 1);
+
+  const remaining = todos
+    .map((t, i) => ({ t, i }))
+    .filter((x) => todoDateOf(x.t) === viewDate)
+    .map((x) => x.i);
+
+  const insertAt =
+    newPosInDay >= remaining.length
+      ? remaining.length
+        ? remaining[remaining.length - 1] + 1
+        : todos.length
+      : remaining[newPosInDay];
+
+  todos.splice(insertAt, 0, item);
   saveTodos();
+}
+
+/* ---------- drag-to-reorder (pointer events: works for touch, mouse, pen) ---------- */
+let todoDrag = null;
+
+document.getElementById('todo-list').addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('.drag-handle');
+  if (!handle) return;
+  e.preventDefault();
+
+  const li = handle.closest('.list-item');
+  const listEl = document.getElementById('todo-list');
+  const siblingRects = Array.from(listEl.querySelectorAll('.list-item'))
+    .filter((el) => el !== li)
+    .map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, height: r.height };
+    });
+
+  todoDrag = {
+    id: handle.dataset.id,
+    li,
+    startY: e.clientY,
+    startRect: li.getBoundingClientRect(),
+    siblingRects
+  };
+
+  li.classList.add('dragging');
+  listEl.classList.add('reordering');
+  try {
+    handle.setPointerCapture(e.pointerId);
+  } catch {
+    /* synthetic/unsupported pointer — dragging still works via document listeners */
+  }
+
+  document.addEventListener('pointermove', onTodoDragMove);
+  document.addEventListener('pointerup', onTodoDragEnd);
+  document.addEventListener('pointercancel', onTodoDragEnd);
+});
+
+function onTodoDragMove(e) {
+  if (!todoDrag) return;
+  const dy = e.clientY - todoDrag.startY;
+  todoDrag.li.style.transform = `translateY(${dy}px)`;
+}
+
+function onTodoDragEnd(e) {
+  if (!todoDrag) return;
+  const dy = e.clientY - todoDrag.startY;
+  const draggedCenter = todoDrag.startRect.top + dy + todoDrag.startRect.height / 2;
+
+  let newPos = 0;
+  todoDrag.siblingRects.forEach((s) => {
+    if (s.top + s.height / 2 < draggedCenter) newPos++;
+  });
+
+  todoDrag.li.classList.remove('dragging');
+  todoDrag.li.style.transform = '';
+  document.getElementById('todo-list').classList.remove('reordering');
+
+  document.removeEventListener('pointermove', onTodoDragMove);
+  document.removeEventListener('pointerup', onTodoDragEnd);
+  document.removeEventListener('pointercancel', onTodoDragEnd);
+
+  const id = todoDrag.id;
+  todoDrag = null;
+  moveTodoToIndex(id, newPos);
 }
 
 document.getElementById('todo-form').addEventListener('submit', (e) => {
@@ -389,7 +464,6 @@ document.getElementById('todo-today-btn').addEventListener('click', () => {
 document.getElementById('todo-list').addEventListener('click', (e) => {
   const checkId = e.target.matches('.todo-check') && e.target.dataset.id;
   const delId = e.target.matches('.item-delete') && e.target.dataset.id;
-  const reorderBtn = e.target.closest('.reorder-btn');
   if (checkId) {
     const t = todos.find((x) => x.id === checkId);
     if (t) t.done = e.target.checked;
@@ -397,8 +471,6 @@ document.getElementById('todo-list').addEventListener('click', (e) => {
   } else if (delId) {
     todos = todos.filter((x) => x.id !== delId);
     saveTodos();
-  } else if (reorderBtn) {
-    moveTodo(reorderBtn.dataset.id, reorderBtn.dataset.dir);
   }
 });
 
