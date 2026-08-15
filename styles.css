@@ -352,6 +352,31 @@ input:focus, select:focus {
   padding: 12px 14px;
 }
 
+.reorder-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.reorder-btn {
+  width: 26px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.reorder-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.reorder-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
 .list-item input[type="checkbox"] {
   width: 20px;
   height: 20px;

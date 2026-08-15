@@ -124,6 +124,28 @@ async function initAuthScreen() {
     const hasBiometric = !!Store.get(WEBAUTHN_CRED_KEY, null);
     const bioAvailable = hasBiometric && (await biometricAvailable());
     document.getElementById('biometric-btn').hidden = !bioAvailable;
+    if (bioAvailable) {
+      // Kick off the fingerprint/Face prompt right away — no extra tap needed.
+      // If it fails or is cancelled, the passcode field and the button both
+      // stay available so the user can retry or fall back to typing.
+      attemptBiometricAuth();
+    }
+  }
+}
+
+async function attemptBiometricAuth() {
+  const errorEl = document.getElementById('login-error');
+  try {
+    const ok = await loginWithBiometric();
+    if (ok) {
+      errorEl.hidden = true;
+      sessionStorage.setItem(SESSION_KEY, '1');
+      enterApp();
+    }
+  } catch (err) {
+    console.warn(err);
+    errorEl.textContent = 'Biometric unlock failed or was cancelled. Use your passcode, or tap the button to try again.';
+    errorEl.hidden = false;
   }
 }
 
@@ -177,20 +199,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   }
 });
 
-document.getElementById('biometric-btn').addEventListener('click', async () => {
-  const errorEl = document.getElementById('login-error');
-  try {
-    const ok = await loginWithBiometric();
-    if (ok) {
-      errorEl.hidden = true;
-      sessionStorage.setItem(SESSION_KEY, '1');
-      enterApp();
-    }
-  } catch (err) {
-    console.warn(err);
-    errorEl.textContent = 'Biometric unlock failed or was cancelled. Use your passcode instead.';
-    errorEl.hidden = false;
-  }
+document.getElementById('biometric-btn').addEventListener('click', () => {
+  attemptBiometricAuth();
 });
 
 document.getElementById('forgot-btn').addEventListener('click', () => {
@@ -298,19 +308,48 @@ function renderTodos() {
     ? 'Nothing here yet for today — add a task above, or copy yesterday\'s list.'
     : 'No tasks were recorded for this date.';
 
-  filtered
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .forEach((t) => {
-      const li = document.createElement('li');
-      li.className = 'list-item' + (t.done ? ' done' : '');
-      li.innerHTML = `
-        <input type="checkbox" ${t.done ? 'checked' : ''} data-id="${t.id}" class="todo-check">
-        <span class="item-text">${escapeHtml(t.text)}</span>
-        <button class="item-delete" data-id="${t.id}" title="Delete">🗑</button>
-      `;
-      list.appendChild(li);
-    });
+  // Tasks display in the order they're stored (not by date added), so manual
+  // reordering below sticks. Reorder arrows only show under the "All" filter,
+  // since that's the only view where their up/down movement is unambiguous.
+  const canReorder = todoFilter === 'all';
+
+  filtered.forEach((t) => {
+    const dayIndex = dayTodos.indexOf(t);
+    const isFirst = dayIndex === 0;
+    const isLast = dayIndex === dayTodos.length - 1;
+
+    const li = document.createElement('li');
+    li.className = 'list-item' + (t.done ? ' done' : '');
+    li.innerHTML = `
+      ${canReorder ? `
+      <div class="reorder-btns">
+        <button class="reorder-btn" data-id="${t.id}" data-dir="up" ${isFirst ? 'disabled' : ''} aria-label="Move up">▲</button>
+        <button class="reorder-btn" data-id="${t.id}" data-dir="down" ${isLast ? 'disabled' : ''} aria-label="Move down">▼</button>
+      </div>` : ''}
+      <input type="checkbox" ${t.done ? 'checked' : ''} data-id="${t.id}" class="todo-check">
+      <span class="item-text">${escapeHtml(t.text)}</span>
+      <button class="item-delete" data-id="${t.id}" title="Delete">🗑</button>
+    `;
+    list.appendChild(li);
+  });
+}
+
+function moveTodo(id, direction) {
+  const dayIndices = todos
+    .map((t, i) => ({ t, i }))
+    .filter((x) => todoDateOf(x.t) === viewDate)
+    .map((x) => x.i);
+
+  const posInDay = dayIndices.findIndex((i) => todos[i].id === id);
+  if (posInDay === -1) return;
+
+  const swapPos = direction === 'up' ? posInDay - 1 : posInDay + 1;
+  if (swapPos < 0 || swapPos >= dayIndices.length) return;
+
+  const idxA = dayIndices[posInDay];
+  const idxB = dayIndices[swapPos];
+  [todos[idxA], todos[idxB]] = [todos[idxB], todos[idxA]];
+  saveTodos();
 }
 
 document.getElementById('todo-form').addEventListener('submit', (e) => {
@@ -350,6 +389,7 @@ document.getElementById('todo-today-btn').addEventListener('click', () => {
 document.getElementById('todo-list').addEventListener('click', (e) => {
   const checkId = e.target.matches('.todo-check') && e.target.dataset.id;
   const delId = e.target.matches('.item-delete') && e.target.dataset.id;
+  const reorderBtn = e.target.closest('.reorder-btn');
   if (checkId) {
     const t = todos.find((x) => x.id === checkId);
     if (t) t.done = e.target.checked;
@@ -357,6 +397,8 @@ document.getElementById('todo-list').addEventListener('click', (e) => {
   } else if (delId) {
     todos = todos.filter((x) => x.id !== delId);
     saveTodos();
+  } else if (reorderBtn) {
+    moveTodo(reorderBtn.dataset.id, reorderBtn.dataset.dir);
   }
 });
 
