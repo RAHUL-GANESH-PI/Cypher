@@ -1,7 +1,7 @@
 // Cypher service worker — enables offline use and "install to home screen".
 // Strategy: network-first (so you always get the latest version when online),
 // falling back to cache when offline.
-const CACHE = 'cypher-cache-v1';
+const CACHE = 'cypher-cache-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -29,7 +29,10 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request)
+    // cache: 'no-store' forces a real network round-trip instead of letting
+    // the browser's own HTTP cache silently hand back a stale copy — without
+    // this, "network-first" can quietly become "stale-cache-first".
+    fetch(e.request, { cache: 'no-store' })
       .then((res) => {
         const clone = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, clone));
