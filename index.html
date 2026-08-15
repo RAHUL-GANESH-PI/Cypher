@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cypher</title>
+<meta name="theme-color" content="#0b0f14">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ LOCK SCREEN ============ -->
+<div id="lock-screen" class="screen">
+  <div class="lock-card">
+    <div class="brand-mark">
+      <img src="icons/icon-192.png" alt="Cypher" class="brand-logo">
+      <h1>Cypher</h1>
+      <p class="tagline">Your life, locked to you.</p>
+    </div>
+
+    <!-- First-run setup -->
+    <div id="setup-view" hidden>
+      <h2>Create your passcode</h2>
+      <p class="hint">This unlocks Cypher on this device. Nothing leaves your device.</p>
+      <form id="setup-form" autocomplete="off">
+        <label class="field">
+          <span>New passcode</span>
+          <input type="password" id="setup-password" minlength="4" required placeholder="At least 4 characters">
+        </label>
+        <label class="field">
+          <span>Confirm passcode</span>
+          <input type="password" id="setup-password-confirm" minlength="4" required placeholder="Re-enter passcode">
+        </label>
+        <label class="checkbox-field" id="setup-biometric-row" hidden>
+          <input type="checkbox" id="setup-biometric" checked>
+          <span>Also enable fingerprint / Face unlock on this device</span>
+        </label>
+        <p class="error" id="setup-error" hidden></p>
+        <button type="submit" class="btn primary">Create &amp; Enter Cypher</button>
+      </form>
+    </div>
+
+    <!-- Returning-user login -->
+    <div id="login-view" hidden>
+      <h2>Welcome back</h2>
+      <button type="button" class="btn primary" id="biometric-btn" hidden>
+        <span class="icon">🫆</span> Unlock with Fingerprint / Face
+      </button>
+      <form id="login-form" autocomplete="off">
+        <label class="field">
+          <span>Passcode</span>
+          <input type="password" id="login-password" required placeholder="Enter your passcode">
+        </label>
+        <p class="error" id="login-error" hidden></p>
+        <button type="submit" class="btn secondary">Unlock</button>
+      </form>
+      <button type="button" class="link-btn" id="forgot-btn">Forgot passcode? Reset app</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MAIN APP ============ -->
+<div id="app" class="screen" hidden>
+  <header class="app-header">
+    <div class="brand">
+      <img src="icons/icon-192.png" alt="" class="brand-logo-sm">
+      <span>Cypher</span>
+    </div>
+    <button id="logout-btn" class="icon-btn" title="Lock Cypher">🔒</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab-btn active" data-tab="todo">To-Do</button>
+    <button class="tab-btn" data-tab="finance">Finance</button>
+    <button class="tab-btn" data-tab="goals">Goals</button>
+  </nav>
+
+  <main class="tab-content">
+
+    <!-- ---------- TO-DO TAB ---------- -->
+    <section id="tab-todo" class="tab-panel active">
+      <div class="section-header">
+        <h2 class="section-title" id="todo-date-label">Today</h2>
+        <div class="todo-header-actions">
+          <button type="button" id="todo-today-btn" class="chip" hidden>Today</button>
+          <div class="date-picker-wrap">
+            <button type="button" class="icon-btn" id="calendar-btn" title="View a different day" aria-label="View a different day">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+                <line x1="8" y1="3" x2="8" y2="7"></line>
+                <line x1="16" y1="3" x2="16" y2="7"></line>
+              </svg>
+            </button>
+            <input type="date" id="todo-date-picker" class="sr-date-input" aria-label="Choose a date">
+          </div>
+        </div>
+      </div>
+
+      <form id="todo-form" class="inline-form">
+        <input type="text" id="todo-input" placeholder="Add a task…" required maxlength="200">
+        <button type="submit" class="btn primary small">Add</button>
+      </form>
+      <div class="todo-toolbar">
+        <div class="filter-row" id="todo-filters">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="active">Active</button>
+          <button class="chip" data-filter="done">Done</button>
+        </div>
+        <button type="button" id="copy-yesterday-btn" class="chip copy-chip">Copy Yesterday's List</button>
+      </div>
+      <p class="hint-text" id="copy-yesterday-msg" hidden></p>
+      <ul id="todo-list" class="list"></ul>
+      <p class="empty-state" id="todo-empty" hidden>Nothing here yet for today — add a task above, or copy yesterday's list.</p>
+    </section>
+
+    <!-- ---------- GOALS TAB ---------- -->
+    <section id="tab-goals" class="tab-panel">
+      <div class="section-header">
+        <h2 class="section-title">Your Goals</h2>
+        <button type="button" class="fab-btn" id="goal-add-toggle" title="Add a goal" aria-label="Add a goal">+</button>
+      </div>
+
+      <div id="goal-list" class="card-list"></div>
+      <p class="empty-state" id="goals-empty" hidden>No goals yet — tap + to add your first one.</p>
+
+      <form id="goal-form" class="card-form" hidden>
+        <label class="field">
+          <span>Goal title</span>
+          <input type="text" id="goal-title" placeholder="e.g. Read 12 books this year" required maxlength="120">
+        </label>
+        <label class="field">
+          <span>Notes (optional)</span>
+          <input type="text" id="goal-notes" placeholder="Any detail you want to remember" maxlength="200">
+        </label>
+        <label class="field">
+          <span>Target date (optional)</span>
+          <input type="date" id="goal-date">
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary small">Add Goal</button>
+          <button type="button" class="btn secondary small" id="goal-cancel">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ---------- FINANCE TAB ---------- -->
+    <section id="tab-finance" class="tab-panel">
+      <div class="finance-subtabs" role="tablist">
+        <button class="subtab-btn active" data-fsub="transactions">Income &amp; Expense</button>
+        <button class="subtab-btn" data-fsub="portfolio">Portfolio</button>
+      </div>
+
+      <div class="currency-row">
+        <label for="currency-select">Currency</label>
+        <select id="currency-select">
+          <option value="₹">₹ INR</option>
+          <option value="$">$ USD</option>
+          <option value="€">€ EUR</option>
+          <option value="£">£ GBP</option>
+        </select>
+      </div>
+
+      <!-- Transactions -->
+      <div id="fsub-transactions" class="fsub-panel active">
+        <div class="summary-row">
+          <div class="summary-card income">
+            <span class="summary-label">Income</span>
+            <span class="summary-value" id="sum-income">0</span>
+          </div>
+          <div class="summary-card expense">
+            <span class="summary-label">Expense</span>
+            <span class="summary-value" id="sum-expense">0</span>
+          </div>
+          <div class="summary-card balance">
+            <span class="summary-label">Balance</span>
+            <span class="summary-value" id="sum-balance">0</span>
+          </div>
+        </div>
+
+        <form id="txn-form" class="card-form">
+          <div class="row-2">
+            <label class="field">
+              <span>Type</span>
+              <select id="txn-type">
+                <option value="income">Income</option>
+                <option value="expense">Expense</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Amount</span>
+              <input type="number" id="txn-amount" min="0" step="0.01" required placeholder="0.00">
+            </label>
+          </div>
+          <div class="row-2">
+            <label class="field">
+              <span>Category</span>
+              <input type="text" id="txn-category" placeholder="e.g. Salary, Food, Rent" required maxlength="60">
+            </label>
+            <label class="field">
+              <span>Date</span>
+              <input type="date" id="txn-date" required>
+            </label>
+          </div>
+          <label class="field">
+            <span>Note (optional)</span>
+            <input type="text" id="txn-note" placeholder="Any detail" maxlength="140">
+          </label>
+          <button type="submit" class="btn primary small">Add Transaction</button>
+        </form>
+
+        <ul id="txn-list" class="list"></ul>
+        <p class="empty-state" id="txn-empty" hidden>No transactions yet — add your first one above.</p>
+      </div>
+
+      <!-- Portfolio -->
+      <div id="fsub-portfolio" class="fsub-panel">
+        <div class="summary-row">
+          <div class="summary-card">
+            <span class="summary-label">Invested</span>
+            <span class="summary-value" id="sum-invested">0</span>
+          </div>
+          <div class="summary-card">
+            <span class="summary-label">Current Value</span>
+            <span class="summary-value" id="sum-current">0</span>
+          </div>
+          <div class="summary-card" id="sum-gain-card">
+            <span class="summary-label">Gain / Loss</span>
+            <span class="summary-value" id="sum-gain">0</span>
+          </div>
+        </div>
+
+        <form id="holding-form" class="card-form">
+          <label class="field">
+            <span>Asset name</span>
+            <input type="text" id="holding-name" placeholder="e.g. NIFTY 50 ETF, Gold, AAPL" required maxlength="80">
+          </label>
+          <div class="row-2">
+            <label class="field">
+              <span>Quantity</span>
+              <input type="number" id="holding-qty" min="0" step="0.0001" required placeholder="0">
+            </label>
+            <label class="field">
+              <span>Buy price / unit</span>
+              <input type="number" id="holding-buy" min="0" step="0.01" required placeholder="0.00">
+            </label>
+          </div>
+          <label class="field">
+            <span>Current price / unit</span>
+            <input type="number" id="holding-current" min="0" step="0.01" required placeholder="0.00">
+          </label>
+          <button type="submit" class="btn primary small">Add Holding</button>
+        </form>
+
+        <div id="holding-list" class="card-list"></div>
+        <p class="empty-state" id="holdings-empty" hidden>No holdings yet — add your first one above.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
