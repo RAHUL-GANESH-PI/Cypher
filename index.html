@@ -106,7 +106,7 @@
   <nav class="tabs" role="tablist">
     <button class="tab-btn active" data-tab="todo">To-Do</button>
     <button class="tab-btn" data-tab="finance">Finance</button>
-    <button class="tab-btn" data-tab="goals">Goals</button>
+    <button class="tab-btn" data-tab="loans">Loans</button>
   </nav>
 
   <main class="tab-content">
@@ -148,32 +148,52 @@
       <p class="empty-state" id="todo-empty" hidden>Nothing here yet for today — add a task above, or copy yesterday's list.</p>
     </section>
 
-    <!-- ---------- GOALS TAB ---------- -->
-    <section id="tab-goals" class="tab-panel">
-      <div class="section-header">
-        <h2 class="section-title">Your Goals</h2>
-        <button type="button" class="fab-btn" id="goal-add-toggle" title="Add a goal" aria-label="Add a goal">+</button>
+    <!-- ---------- LOANS TAB ---------- -->
+    <section id="tab-loans" class="tab-panel">
+      <div class="summary-row">
+        <div class="summary-card">
+          <span class="summary-label">Total Borrowed</span>
+          <span class="summary-value" id="sum-borrowed">0</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Outstanding</span>
+          <span class="summary-value" id="sum-outstanding">0</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Paid Off</span>
+          <span class="summary-value" id="sum-paid">0</span>
+          <span class="summary-subvalue" id="sum-paid-pct"></span>
+        </div>
       </div>
 
-      <div id="goal-list" class="card-list"></div>
-      <p class="empty-state" id="goals-empty" hidden>No goals yet — tap + to add your first one.</p>
+      <div class="section-header">
+        <h2 class="section-title">Your Loans</h2>
+        <button type="button" class="fab-btn" id="loan-add-toggle" title="Add a loan" aria-label="Add a loan">+</button>
+      </div>
 
-      <form id="goal-form" class="card-form" hidden>
+      <div id="loan-list" class="card-list"></div>
+      <p class="empty-state" id="loans-empty" hidden>No loans yet — tap + to add your first one.</p>
+
+      <form id="loan-form" class="card-form" hidden>
         <label class="field">
-          <span>Goal title</span>
-          <input type="text" id="goal-title" placeholder="e.g. Read 12 books this year" required maxlength="120">
+          <span>Lender</span>
+          <select id="loan-lender">
+            <option value="Bank">Bank</option>
+            <option value="Amma">Amma</option>
+            <option value="RajaPushpam">RajaPushpam</option>
+          </select>
         </label>
         <label class="field">
-          <span>Notes (optional)</span>
-          <input type="text" id="goal-notes" placeholder="Any detail you want to remember" maxlength="200">
+          <span>Loan amount</span>
+          <input type="number" id="loan-amount" min="0" step="0.01" required placeholder="0.00">
         </label>
         <label class="field">
-          <span>Target date (optional)</span>
-          <input type="date" id="goal-date">
+          <span>Note (optional)</span>
+          <input type="text" id="loan-note" placeholder="e.g. Home renovation" maxlength="140">
         </label>
         <div class="form-actions">
-          <button type="submit" class="btn primary small">Add Goal</button>
-          <button type="button" class="btn secondary small" id="goal-cancel">Cancel</button>
+          <button type="submit" class="btn primary small">Add Loan</button>
+          <button type="button" class="btn secondary small" id="loan-cancel">Cancel</button>
         </div>
       </form>
     </section>
@@ -227,6 +247,7 @@
                 <option>Juice</option>
                 <option>Fruits</option>
                 <option>Milk</option>
+                <option>Groceries</option>
                 <option>Petrol</option>
                 <option>Friend's Outing</option>
                 <option>Movie</option>

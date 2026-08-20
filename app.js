@@ -149,7 +149,7 @@ document.getElementById('biometric-btn').addEventListener('click', () => {
 
 document.getElementById('reset-btn').addEventListener('click', async () => {
   const sure = confirm(
-    'Resetting will permanently erase ALL Cypher data on this device (to-dos, goals, finances, and your fingerprint setup) so you can start over. This cannot be undone. Continue?'
+    'Resetting will permanently erase ALL Cypher data on this device (to-dos, loans, finances, and your fingerprint setup) so you can start over. This cannot be undone. Continue?'
   );
   if (!sure) return;
 
@@ -172,9 +172,9 @@ function enterApp() {
   lockScreen.hidden = true;
   appScreen.hidden = false;
   renderTodos();
-  renderGoals();
   renderTxns();
   renderHoldings();
+  renderLoans();
 }
 
 /* =========================================================
@@ -220,7 +220,7 @@ document.getElementById('qr-copy-btn').addEventListener('click', async () => {
 /* =========================================================
    TAB NAVIGATION
    ========================================================= */
-const TAB_ORDER = ['todo', 'finance', 'goals'];
+const TAB_ORDER = ['todo', 'finance', 'loans'];
 
 function switchToTab(name) {
   const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
@@ -244,26 +244,33 @@ document.querySelectorAll('.subtab-btn').forEach((btn) => {
   });
 });
 
-/* ---------- swipe between To-Do / Finance / Goals ---------- */
+/* ---------- swipe between To-Do / Finance / Loans ---------- */
 // touch-action: pan-y (set in CSS) leaves vertical scrolling to the browser
 // natively and only hands horizontal gestures to us, so this can't break
 // scrolling inside any tab's list.
+//
+// Listens on the whole #app container (not just .tab-content) — .tab-content
+// only grows as tall as its current tab's content, so on a short list (To-Do
+// or Loans with a few items) it leaves blank space below that .tab-content
+// itself never covers. #app has min-height: 100vh, so this reaches the full
+// screen no matter how short the active tab's content is.
 (() => {
-  const content = document.querySelector('.tab-content');
+  const content = document.getElementById('app');
   let startX = null;
   let startY = null;
-  let tracking = false;
+  let trackingPointerId = null;
 
   content.addEventListener('pointerdown', (e) => {
     if (e.target.closest('.drag-handle')) return; // don't fight the to-do drag-reorder gesture
+    if (e.target.closest('.modal-overlay')) return; // don't swipe tabs behind an open modal
     startX = e.clientX;
     startY = e.clientY;
-    tracking = true;
+    trackingPointerId = e.pointerId;
   });
 
   function endSwipe(e) {
-    if (!tracking) return;
-    tracking = false;
+    if (trackingPointerId === null || e.pointerId !== trackingPointerId) return;
+    trackingPointerId = null;
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     // require a clearly horizontal, deliberate drag — not a tap, not a vertical scroll
@@ -276,8 +283,8 @@ document.querySelectorAll('.subtab-btn').forEach((btn) => {
   }
 
   content.addEventListener('pointerup', endSwipe);
-  content.addEventListener('pointercancel', () => {
-    tracking = false;
+  content.addEventListener('pointercancel', (e) => {
+    if (e.pointerId === trackingPointerId) trackingPointerId = null;
   });
 })();
 
@@ -547,104 +554,146 @@ document.getElementById('copy-yesterday-btn').addEventListener('click', () => {
 });
 
 /* =========================================================
-   GOALS
+   LOANS
    ========================================================= */
-let goals = Store.get('cypher_goals', []);
+let loans = Store.get('cypher_loans', []);
 
-function saveGoals() {
-  Store.set('cypher_goals', goals);
-  renderGoals();
+function saveLoans() {
+  Store.set('cypher_loans', loans);
+  renderLoans();
 }
 
-function renderGoals() {
-  const list = document.getElementById('goal-list');
-  const empty = document.getElementById('goals-empty');
+function renderLoans() {
+  const list = document.getElementById('loan-list');
+  const empty = document.getElementById('loans-empty');
   list.innerHTML = '';
-  empty.hidden = goals.length !== 0;
+  empty.hidden = loans.length !== 0;
 
-  goals
+  let borrowed = 0;
+  let outstanding = 0;
+  loans.forEach((l) => {
+    borrowed += l.amount;
+    outstanding += l.remaining;
+  });
+  const paid = borrowed - outstanding;
+  const paidPct = borrowed > 0 ? (paid / borrowed) * 100 : 0;
+
+  setStatValue('sum-borrowed', fmtMoney(borrowed));
+  setStatValue('sum-outstanding', fmtMoney(outstanding));
+  setStatValue('sum-paid', fmtMoney(paid));
+  document.getElementById('sum-paid-pct').textContent = `${paidPct.toFixed(1)}% paid`;
+
+  loans
     .slice()
     .sort((a, b) => b.createdAt - a.createdAt)
-    .forEach((g) => {
+    .forEach((l) => {
+      const loanPaid = l.amount - l.remaining;
+      const loanPaidPct = l.amount > 0 ? (loanPaid / l.amount) * 100 : 0;
+      const updatedAt = l.updatedAt || l.createdAt;
+
       const card = document.createElement('div');
       card.className = 'item-card';
-      const dateStr = g.targetDate ? `Target: ${formatDate(g.targetDate)}` : '';
       card.innerHTML = `
         <div class="item-card-head">
           <div>
-            <div class="item-card-title">${escapeHtml(g.title)}</div>
-            ${g.notes ? `<div class="item-card-notes">${escapeHtml(g.notes)}</div>` : ''}
+            <div class="item-card-title">${escapeHtml(l.lender)}</div>
+            <div class="item-card-meta">${l.note ? escapeHtml(l.note) + ' · ' : ''}Balance updated ${formatDateTime(updatedAt)}</div>
           </div>
-          <button class="item-delete" data-id="${g.id}" title="Delete">🗑</button>
+          <button class="item-delete" data-id="${l.id}" title="Delete">🗑</button>
         </div>
-        ${dateStr ? `<div class="item-card-meta">${dateStr}</div>` : ''}
-        <div class="progress-row">
-          <div class="progress-track"><div class="progress-fill" style="width:${g.progress}%"></div></div>
+        <div class="holding-stats">
+          <div>Loan amount: <b>${fmtMoney(l.amount)}</b></div>
+          <div>Remaining: <b>${fmtMoney(l.remaining)}</b></div>
+          <div>Paid: <b>${fmtMoney(loanPaid)} (${loanPaidPct.toFixed(1)}%)</b></div>
         </div>
-        <div class="progress-btns">
-          <button class="step-btn" data-id="${g.id}" data-delta="-1" aria-label="Decrease 1%" ${g.progress <= 0 ? 'disabled' : ''}>−</button>
-          <span class="step-pct">${g.progress}%</span>
-          <button class="step-btn" data-id="${g.id}" data-delta="1" aria-label="Increase 1%" ${g.progress >= 100 ? 'disabled' : ''}>+</button>
-          <button class="mark-done-btn" data-id="${g.id}" data-delta="done">Mark done</button>
+        <div class="holding-actions">
+          <button type="button" class="chip update-balance-btn" data-id="${l.id}">Update Balance</button>
         </div>
+        <form class="update-balance-form" data-id="${l.id}" hidden>
+          <input type="number" class="update-balance-input" min="0" step="0.01" placeholder="New remaining balance" required>
+          <button type="submit" class="btn primary small">Save</button>
+          <button type="button" class="btn secondary small cancel-update-balance" data-id="${l.id}">Cancel</button>
+        </form>
       `;
       list.appendChild(card);
     });
 }
 
-const goalForm = document.getElementById('goal-form');
-const goalAddToggle = document.getElementById('goal-add-toggle');
+const loanForm = document.getElementById('loan-form');
+const loanAddToggle = document.getElementById('loan-add-toggle');
 
-function openGoalForm() {
-  goalForm.hidden = false;
-  goalAddToggle.classList.add('is-open');
-  goalAddToggle.setAttribute('aria-label', 'Close');
-  document.getElementById('goal-title').focus();
+function openLoanForm() {
+  loanForm.hidden = false;
+  loanAddToggle.classList.add('is-open');
+  loanAddToggle.setAttribute('aria-label', 'Close');
+  document.getElementById('loan-amount').focus();
 }
 
-function closeGoalForm() {
-  goalForm.hidden = true;
-  goalForm.reset();
-  goalAddToggle.classList.remove('is-open');
-  goalAddToggle.setAttribute('aria-label', 'Add a goal');
+function closeLoanForm() {
+  loanForm.hidden = true;
+  loanForm.reset();
+  loanAddToggle.classList.remove('is-open');
+  loanAddToggle.setAttribute('aria-label', 'Add a loan');
 }
 
-goalAddToggle.addEventListener('click', () => {
-  if (goalForm.hidden) openGoalForm();
-  else closeGoalForm();
+loanAddToggle.addEventListener('click', () => {
+  if (loanForm.hidden) openLoanForm();
+  else closeLoanForm();
 });
 
-document.getElementById('goal-cancel').addEventListener('click', closeGoalForm);
+document.getElementById('loan-cancel').addEventListener('click', closeLoanForm);
 
-goalForm.addEventListener('submit', (e) => {
+loanForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const title = document.getElementById('goal-title').value.trim();
-  const notes = document.getElementById('goal-notes').value.trim();
-  const targetDate = document.getElementById('goal-date').value;
-  if (!title) return;
-  goals.push({ id: uid(), title, notes, targetDate, progress: 0, createdAt: Date.now() });
-  closeGoalForm();
-  saveGoals();
+  const lender = document.getElementById('loan-lender').value;
+  const amount = parseFloat(document.getElementById('loan-amount').value);
+  const note = document.getElementById('loan-note').value.trim();
+  if (isNaN(amount) || amount < 0) return;
+
+  const now = Date.now();
+  loans.push({ id: uid(), lender, amount, remaining: amount, note, createdAt: now, updatedAt: now });
+  closeLoanForm();
+  saveLoans();
 });
 
-document.getElementById('goal-list').addEventListener('click', (e) => {
+document.getElementById('loan-list').addEventListener('click', (e) => {
   const delId = e.target.matches('.item-delete') && e.target.dataset.id;
+  const updateBtn = e.target.closest('.update-balance-btn');
+  const cancelBtn = e.target.closest('.cancel-update-balance');
+
   if (delId) {
-    goals = goals.filter((g) => g.id !== delId);
-    saveGoals();
+    loans = loans.filter((l) => l.id !== delId);
+    saveLoans();
     return;
   }
-  if (e.target.matches('[data-delta]')) {
-    const id = e.target.dataset.id;
-    const delta = e.target.dataset.delta;
-    const g = goals.find((x) => x.id === id);
-    if (!g) return;
-    if (delta === 'done') {
-      g.progress = 100;
-    } else {
-      g.progress = Math.max(0, Math.min(100, g.progress + parseInt(delta, 10)));
-    }
-    saveGoals();
+
+  if (updateBtn) {
+    const card = updateBtn.closest('.item-card');
+    const form = card.querySelector('.update-balance-form');
+    const l = loans.find((x) => x.id === updateBtn.dataset.id);
+    form.querySelector('.update-balance-input').value = l ? l.remaining : '';
+    form.hidden = false;
+    form.querySelector('.update-balance-input').focus();
+    return;
+  }
+
+  if (cancelBtn) {
+    cancelBtn.closest('.update-balance-form').hidden = true;
+  }
+});
+
+document.getElementById('loan-list').addEventListener('submit', (e) => {
+  if (!e.target.matches('.update-balance-form')) return;
+  e.preventDefault();
+  const id = e.target.dataset.id;
+  const newRemaining = parseFloat(e.target.querySelector('.update-balance-input').value);
+  if (isNaN(newRemaining) || newRemaining < 0) return;
+
+  const l = loans.find((x) => x.id === id);
+  if (l) {
+    l.remaining = newRemaining;
+    l.updatedAt = Date.now();
+    saveLoans();
   }
 });
 
@@ -1012,7 +1061,7 @@ document.getElementById('holding-list').addEventListener('submit', (e) => {
    ========================================================= */
 const DATA_SHEETS = [
   { name: 'To-Do', key: 'cypher_todos', headers: ['ID', 'Date', 'Task', 'Done', 'Created At'] },
-  { name: 'Goals', key: 'cypher_goals', headers: ['ID', 'Title', 'Notes', 'Target Date', 'Progress', 'Created At'] },
+  { name: 'Loans', key: 'cypher_loans', headers: ['ID', 'Lender', 'Loan Amount', 'Remaining', 'Note', 'Created At', 'Balance Updated At'] },
   { name: 'Transactions', key: 'cypher_finance_transactions', headers: ['ID', 'Type', 'Category', 'Amount', 'Date', 'Note', 'Created At'] },
   { name: 'Portfolio', key: 'cypher_finance_portfolio', headers: ['ID', 'Name', 'Type', 'Quantity', 'Buy Price', 'Current Price', 'Created At', 'Price Updated At'] }
 ];
@@ -1021,8 +1070,8 @@ function itemToRow(sheetName, item) {
   switch (sheetName) {
     case 'To-Do':
       return [item.id, item.date || '', item.text, item.done ? 'TRUE' : 'FALSE', item.createdAt];
-    case 'Goals':
-      return [item.id, item.title, item.notes || '', item.targetDate || '', item.progress, item.createdAt];
+    case 'Loans':
+      return [item.id, item.lender, item.amount, item.remaining, item.note || '', item.createdAt, item.updatedAt || item.createdAt];
     case 'Transactions':
       return [item.id, item.type, item.category, item.amount, item.date, item.note || '', item.createdAt];
     case 'Portfolio':
@@ -1036,8 +1085,10 @@ function rowToItem(sheetName, row) {
   switch (sheetName) {
     case 'To-Do':
       return { id: String(row[0]), date: String(row[1] || ''), text: String(row[2] || ''), done: String(row[3]).toUpperCase() === 'TRUE', createdAt: Number(row[4]) || Date.now() };
-    case 'Goals':
-      return { id: String(row[0]), title: String(row[1] || ''), notes: String(row[2] || ''), targetDate: String(row[3] || ''), progress: Number(row[4]) || 0, createdAt: Number(row[5]) || Date.now() };
+    case 'Loans': {
+      const createdAt = Number(row[5]) || Date.now();
+      return { id: String(row[0]), lender: String(row[1] || ''), amount: Number(row[2]) || 0, remaining: Number(row[3]) || 0, note: String(row[4] || ''), createdAt, updatedAt: Number(row[6]) || createdAt };
+    }
     case 'Transactions':
       return { id: String(row[0]), type: String(row[1]), category: String(row[2] || ''), amount: Number(row[3]) || 0, date: String(row[4] || ''), note: String(row[5] || ''), createdAt: Number(row[6]) || Date.now() };
     case 'Portfolio': {
@@ -1111,7 +1162,7 @@ document.getElementById('import-file-input').addEventListener('change', async (e
     }
 
     const sure = confirm(
-      'Importing will replace all current To-Do, Goals, Transaction, and Portfolio data on this device with the contents of this file. This cannot be undone. Continue?'
+      'Importing will replace all current To-Do, Loans, Transaction, and Portfolio data on this device with the contents of this file. This cannot be undone. Continue?'
     );
     if (!sure) return;
 
