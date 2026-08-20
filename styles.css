@@ -610,21 +610,16 @@ input:focus, select:focus {
   align-items: center;
 }
 
-.update-price-form,
-.update-qty-form,
-.update-balance-form {
+/* shared style for every inline "edit in place" form (price/qty/pay/interest…) */
+.inline-edit-form {
   display: flex;
   gap: 8px;
   margin-top: 10px;
 }
-.update-price-form input,
-.update-qty-form input,
-.update-balance-form input {
+.inline-edit-form input {
   flex: 1;
 }
-.update-price-form .btn,
-.update-qty-form .btn,
-.update-balance-form .btn {
+.inline-edit-form .btn {
   width: auto;
   white-space: nowrap;
 }
@@ -656,6 +651,9 @@ input:focus, select:focus {
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 16px;
+}
+.summary-row-4 {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .summary-card {

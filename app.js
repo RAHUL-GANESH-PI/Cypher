@@ -571,15 +571,18 @@ function renderLoans() {
 
   let borrowed = 0;
   let outstanding = 0;
+  let interestOwed = 0;
   loans.forEach((l) => {
     borrowed += l.amount;
     outstanding += l.remaining;
+    interestOwed += l.interest || 0;
   });
   const paid = borrowed - outstanding;
   const paidPct = borrowed > 0 ? (paid / borrowed) * 100 : 0;
 
   setStatValue('sum-borrowed', fmtMoney(borrowed));
   setStatValue('sum-outstanding', fmtMoney(outstanding));
+  setStatValue('sum-interest', fmtMoney(interestOwed));
   setStatValue('sum-paid', fmtMoney(paid));
   document.getElementById('sum-paid-pct').textContent = `${paidPct.toFixed(1)}% paid`;
 
@@ -587,6 +590,7 @@ function renderLoans() {
     .slice()
     .sort((a, b) => b.createdAt - a.createdAt)
     .forEach((l) => {
+      const interest = l.interest || 0;
       const loanPaid = l.amount - l.remaining;
       const loanPaidPct = l.amount > 0 ? (loanPaid / l.amount) * 100 : 0;
       const updatedAt = l.updatedAt || l.createdAt;
@@ -597,22 +601,29 @@ function renderLoans() {
         <div class="item-card-head">
           <div>
             <div class="item-card-title">${escapeHtml(l.lender)}</div>
-            <div class="item-card-meta">${l.note ? escapeHtml(l.note) + ' · ' : ''}Balance updated ${formatDateTime(updatedAt)}</div>
+            <div class="item-card-meta">${l.note ? escapeHtml(l.note) + ' · ' : ''}Updated ${formatDateTime(updatedAt)}</div>
           </div>
           <button class="item-delete" data-id="${l.id}" title="Delete">🗑</button>
         </div>
         <div class="holding-stats">
           <div>Loan amount: <b>${fmtMoney(l.amount)}</b></div>
           <div>Remaining: <b>${fmtMoney(l.remaining)}</b></div>
+          <div>Interest owed: <b>${fmtMoney(interest)}</b></div>
           <div>Paid: <b>${fmtMoney(loanPaid)} (${loanPaidPct.toFixed(1)}%)</b></div>
         </div>
         <div class="holding-actions">
-          <button type="button" class="chip update-balance-btn" data-id="${l.id}">Update Balance</button>
+          <button type="button" class="chip pay-amount-btn" data-id="${l.id}">Pay Amount</button>
+          <button type="button" class="chip add-interest-btn" data-id="${l.id}">Add Interest</button>
         </div>
-        <form class="update-balance-form" data-id="${l.id}" hidden>
-          <input type="number" class="update-balance-input" min="0" step="0.01" placeholder="New remaining balance" required>
+        <form class="pay-amount-form inline-edit-form" data-id="${l.id}" hidden>
+          <input type="number" class="pay-amount-input" min="0" step="0.01" placeholder="Amount you paid" required>
           <button type="submit" class="btn primary small">Save</button>
-          <button type="button" class="btn secondary small cancel-update-balance" data-id="${l.id}">Cancel</button>
+          <button type="button" class="btn secondary small cancel-pay-amount" data-id="${l.id}">Cancel</button>
+        </form>
+        <form class="add-interest-form inline-edit-form" data-id="${l.id}" hidden>
+          <input type="number" class="add-interest-input" min="0" step="0.01" placeholder="Interest to add" required>
+          <button type="submit" class="btn primary small">Save</button>
+          <button type="button" class="btn secondary small cancel-add-interest" data-id="${l.id}">Cancel</button>
         </form>
       `;
       list.appendChild(card);
@@ -621,17 +632,28 @@ function renderLoans() {
 
 const loanForm = document.getElementById('loan-form');
 const loanAddToggle = document.getElementById('loan-add-toggle');
+const loanLenderInput = document.getElementById('loan-lender');
+const loanLenderWarning = document.getElementById('loan-lender-warning');
+
+function checkLoanLenderExists() {
+  const name = loanLenderInput.value.trim().toLowerCase();
+  const exists = name && loans.some((l) => l.lender.trim().toLowerCase() === name);
+  loanLenderWarning.textContent = exists ? `You already have a loan from "${loanLenderInput.value.trim()}". This will add a separate loan.` : '';
+  loanLenderWarning.hidden = !exists;
+}
+loanLenderInput.addEventListener('input', checkLoanLenderExists);
 
 function openLoanForm() {
   loanForm.hidden = false;
   loanAddToggle.classList.add('is-open');
   loanAddToggle.setAttribute('aria-label', 'Close');
-  document.getElementById('loan-amount').focus();
+  loanLenderInput.focus();
 }
 
 function closeLoanForm() {
   loanForm.hidden = true;
   loanForm.reset();
+  loanLenderWarning.hidden = true;
   loanAddToggle.classList.remove('is-open');
   loanAddToggle.setAttribute('aria-label', 'Add a loan');
 }
@@ -645,21 +667,23 @@ document.getElementById('loan-cancel').addEventListener('click', closeLoanForm);
 
 loanForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const lender = document.getElementById('loan-lender').value;
+  const lender = loanLenderInput.value.trim();
   const amount = parseFloat(document.getElementById('loan-amount').value);
   const note = document.getElementById('loan-note').value.trim();
-  if (isNaN(amount) || amount < 0) return;
+  if (!lender || isNaN(amount) || amount < 0) return;
 
   const now = Date.now();
-  loans.push({ id: uid(), lender, amount, remaining: amount, note, createdAt: now, updatedAt: now });
+  loans.push({ id: uid(), lender, amount, remaining: amount, interest: 0, note, createdAt: now, updatedAt: now });
   closeLoanForm();
   saveLoans();
 });
 
 document.getElementById('loan-list').addEventListener('click', (e) => {
   const delId = e.target.matches('.item-delete') && e.target.dataset.id;
-  const updateBtn = e.target.closest('.update-balance-btn');
-  const cancelBtn = e.target.closest('.cancel-update-balance');
+  const payBtn = e.target.closest('.pay-amount-btn');
+  const cancelPayBtn = e.target.closest('.cancel-pay-amount');
+  const interestBtn = e.target.closest('.add-interest-btn');
+  const cancelInterestBtn = e.target.closest('.cancel-add-interest');
 
   if (delId) {
     loans = loans.filter((l) => l.id !== delId);
@@ -667,33 +691,70 @@ document.getElementById('loan-list').addEventListener('click', (e) => {
     return;
   }
 
-  if (updateBtn) {
-    const card = updateBtn.closest('.item-card');
-    const form = card.querySelector('.update-balance-form');
-    const l = loans.find((x) => x.id === updateBtn.dataset.id);
-    form.querySelector('.update-balance-input').value = l ? l.remaining : '';
+  if (payBtn) {
+    const card = payBtn.closest('.item-card');
+    const form = card.querySelector('.pay-amount-form');
+    form.querySelector('.pay-amount-input').value = '';
     form.hidden = false;
-    form.querySelector('.update-balance-input').focus();
+    form.querySelector('.pay-amount-input').focus();
+    return;
+  }
+  if (cancelPayBtn) {
+    cancelPayBtn.closest('.pay-amount-form').hidden = true;
     return;
   }
 
-  if (cancelBtn) {
-    cancelBtn.closest('.update-balance-form').hidden = true;
+  if (interestBtn) {
+    const card = interestBtn.closest('.item-card');
+    const form = card.querySelector('.add-interest-form');
+    form.querySelector('.add-interest-input').value = '';
+    form.hidden = false;
+    form.querySelector('.add-interest-input').focus();
+    return;
+  }
+  if (cancelInterestBtn) {
+    cancelInterestBtn.closest('.add-interest-form').hidden = true;
   }
 });
 
 document.getElementById('loan-list').addEventListener('submit', (e) => {
-  if (!e.target.matches('.update-balance-form')) return;
-  e.preventDefault();
-  const id = e.target.dataset.id;
-  const newRemaining = parseFloat(e.target.querySelector('.update-balance-input').value);
-  if (isNaN(newRemaining) || newRemaining < 0) return;
+  if (e.target.matches('.pay-amount-form')) {
+    e.preventDefault();
+    const id = e.target.dataset.id;
+    const payment = parseFloat(e.target.querySelector('.pay-amount-input').value);
+    if (isNaN(payment) || payment <= 0) return;
 
-  const l = loans.find((x) => x.id === id);
-  if (l) {
-    l.remaining = newRemaining;
-    l.updatedAt = Date.now();
-    saveLoans();
+    const l = loans.find((x) => x.id === id);
+    if (l) {
+      // A payment clears any outstanding interest first; only what's left
+      // over after that reduces the principal (and counts toward Paid Off).
+      let remainingPayment = payment;
+      const interestOwed = l.interest || 0;
+      const interestPaid = Math.min(remainingPayment, interestOwed);
+      l.interest = interestOwed - interestPaid;
+      remainingPayment -= interestPaid;
+
+      const principalPaid = Math.min(remainingPayment, l.remaining);
+      l.remaining = Math.max(0, l.remaining - principalPaid);
+
+      l.updatedAt = Date.now();
+      saveLoans();
+    }
+    return;
+  }
+
+  if (e.target.matches('.add-interest-form')) {
+    e.preventDefault();
+    const id = e.target.dataset.id;
+    const addedInterest = parseFloat(e.target.querySelector('.add-interest-input').value);
+    if (isNaN(addedInterest) || addedInterest <= 0) return;
+
+    const l = loans.find((x) => x.id === id);
+    if (l) {
+      l.interest = (l.interest || 0) + addedInterest;
+      l.updatedAt = Date.now();
+      saveLoans();
+    }
   }
 });
 
@@ -888,12 +949,12 @@ function renderHoldings() {
           <button type="button" class="chip update-price-btn" data-id="${h.id}">Update Price</button>
           <button type="button" class="chip update-qty-btn" data-id="${h.id}">${editQtyLabel}</button>
         </div>
-        <form class="update-price-form" data-id="${h.id}" hidden>
+        <form class="update-price-form inline-edit-form" data-id="${h.id}" hidden>
           <input type="number" class="update-price-input" min="0" step="0.01" placeholder="New current price" required>
           <button type="submit" class="btn primary small">Save</button>
           <button type="button" class="btn secondary small cancel-update-price" data-id="${h.id}">Cancel</button>
         </form>
-        <form class="update-qty-form" data-id="${h.id}" hidden>
+        <form class="update-qty-form inline-edit-form" data-id="${h.id}" hidden>
           <input type="number" class="update-qty-input" min="0" step="0.0001" placeholder="${qtyPlaceholder}" required>
           <button type="submit" class="btn primary small">Save</button>
           <button type="button" class="btn secondary small cancel-update-qty" data-id="${h.id}">Cancel</button>
@@ -1061,7 +1122,7 @@ document.getElementById('holding-list').addEventListener('submit', (e) => {
    ========================================================= */
 const DATA_SHEETS = [
   { name: 'To-Do', key: 'cypher_todos', headers: ['ID', 'Date', 'Task', 'Done', 'Created At'] },
-  { name: 'Loans', key: 'cypher_loans', headers: ['ID', 'Lender', 'Loan Amount', 'Remaining', 'Note', 'Created At', 'Balance Updated At'] },
+  { name: 'Loans', key: 'cypher_loans', headers: ['ID', 'Lender', 'Loan Amount', 'Remaining', 'Interest Owed', 'Note', 'Created At', 'Updated At'] },
   { name: 'Transactions', key: 'cypher_finance_transactions', headers: ['ID', 'Type', 'Category', 'Amount', 'Date', 'Note', 'Created At'] },
   { name: 'Portfolio', key: 'cypher_finance_portfolio', headers: ['ID', 'Name', 'Type', 'Quantity', 'Buy Price', 'Current Price', 'Created At', 'Price Updated At'] }
 ];
@@ -1071,7 +1132,7 @@ function itemToRow(sheetName, item) {
     case 'To-Do':
       return [item.id, item.date || '', item.text, item.done ? 'TRUE' : 'FALSE', item.createdAt];
     case 'Loans':
-      return [item.id, item.lender, item.amount, item.remaining, item.note || '', item.createdAt, item.updatedAt || item.createdAt];
+      return [item.id, item.lender, item.amount, item.remaining, item.interest || 0, item.note || '', item.createdAt, item.updatedAt || item.createdAt];
     case 'Transactions':
       return [item.id, item.type, item.category, item.amount, item.date, item.note || '', item.createdAt];
     case 'Portfolio':
@@ -1086,8 +1147,8 @@ function rowToItem(sheetName, row) {
     case 'To-Do':
       return { id: String(row[0]), date: String(row[1] || ''), text: String(row[2] || ''), done: String(row[3]).toUpperCase() === 'TRUE', createdAt: Number(row[4]) || Date.now() };
     case 'Loans': {
-      const createdAt = Number(row[5]) || Date.now();
-      return { id: String(row[0]), lender: String(row[1] || ''), amount: Number(row[2]) || 0, remaining: Number(row[3]) || 0, note: String(row[4] || ''), createdAt, updatedAt: Number(row[6]) || createdAt };
+      const createdAt = Number(row[6]) || Date.now();
+      return { id: String(row[0]), lender: String(row[1] || ''), amount: Number(row[2]) || 0, remaining: Number(row[3]) || 0, interest: Number(row[4]) || 0, note: String(row[5] || ''), createdAt, updatedAt: Number(row[7]) || createdAt };
     }
     case 'Transactions':
       return { id: String(row[0]), type: String(row[1]), category: String(row[2] || ''), amount: Number(row[3]) || 0, date: String(row[4] || ''), note: String(row[5] || ''), createdAt: Number(row[6]) || Date.now() };
