@@ -751,9 +751,15 @@ function renderHoldings() {
 
   setStatValue('sum-invested', fmtMoney(invested));
   setStatValue('sum-current', fmtMoney(current));
-  setStatValue('sum-gain', `${gain >= 0 ? '+' : ''}${fmtMoney(gain)} (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)`);
-  document.getElementById('sum-gain').classList.toggle('gain-positive', gain >= 0);
-  document.getElementById('sum-gain').classList.toggle('gain-negative', gain < 0);
+  // Gain/Loss keeps its original full size (not the shrink-to-fit sizing used
+  // above) — it always includes a "(+x.x%)" suffix, which made it look small
+  // even for everyday values. Long text still won't wrap thanks to the base
+  // .summary-value nowrap + ellipsis rule.
+  const gainEl = document.getElementById('sum-gain');
+  gainEl.textContent = `${gain >= 0 ? '+' : ''}${fmtMoney(gain)} (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)`;
+  gainEl.classList.remove('stat-compact', 'stat-tiny', 'stat-xtiny');
+  gainEl.classList.toggle('gain-positive', gain >= 0);
+  gainEl.classList.toggle('gain-negative', gain < 0);
 
   holdings
     .slice()
@@ -807,18 +813,57 @@ function renderHoldings() {
     });
 }
 
-function updateHoldingQtyLabel() {
-  const isGold = document.getElementById('holding-type').value === 'Gold';
+// Only "Stock" needs an asset name — Gold and Real Estate holdings are just
+// labeled by their type, since there's nothing more specific to ask for.
+function updateHoldingFormForType() {
+  const type = document.getElementById('holding-type').value;
+  const isGold = type === 'Gold';
+  const isStock = type === 'Stock';
+
   document.getElementById('holding-qty-label').textContent = isGold ? 'Grams' : 'Quantity';
   document.getElementById('holding-qty').placeholder = isGold ? '0 (grams)' : '0';
-}
-document.getElementById('holding-type').addEventListener('change', updateHoldingQtyLabel);
-updateHoldingQtyLabel();
 
-document.getElementById('holding-form').addEventListener('submit', (e) => {
+  const nameField = document.getElementById('holding-name-field');
+  const nameInput = document.getElementById('holding-name');
+  nameField.hidden = !isStock;
+  nameInput.required = isStock;
+  if (!isStock) nameInput.value = '';
+  document.getElementById('holding-row-1').classList.toggle('single-col', !isStock);
+}
+document.getElementById('holding-type').addEventListener('change', updateHoldingFormForType);
+updateHoldingFormForType();
+
+const holdingForm = document.getElementById('holding-form');
+const holdingAddToggle = document.getElementById('holding-add-toggle');
+
+function openHoldingForm() {
+  holdingForm.hidden = false;
+  holdingAddToggle.classList.add('is-open');
+  holdingAddToggle.setAttribute('aria-label', 'Close');
+  updateHoldingFormForType();
+  const firstVisibleField = document.getElementById('holding-name-field').hidden ? 'holding-qty' : 'holding-name';
+  document.getElementById(firstVisibleField).focus();
+}
+
+function closeHoldingForm() {
+  holdingForm.hidden = true;
+  holdingForm.reset();
+  updateHoldingFormForType();
+  holdingAddToggle.classList.remove('is-open');
+  holdingAddToggle.setAttribute('aria-label', 'Add a holding');
+}
+
+holdingAddToggle.addEventListener('click', () => {
+  if (holdingForm.hidden) openHoldingForm();
+  else closeHoldingForm();
+});
+
+document.getElementById('holding-cancel').addEventListener('click', closeHoldingForm);
+
+holdingForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const name = document.getElementById('holding-name').value.trim();
   const type = document.getElementById('holding-type').value;
+  const name = type === 'Stock' ? document.getElementById('holding-name').value.trim() : type;
   const qty = parseFloat(document.getElementById('holding-qty').value);
   const buyPrice = parseFloat(document.getElementById('holding-buy').value);
   const currentPrice = parseFloat(document.getElementById('holding-current').value);
@@ -826,8 +871,7 @@ document.getElementById('holding-form').addEventListener('submit', (e) => {
 
   const now = Date.now();
   holdings.push({ id: uid(), name, type, qty, buyPrice, currentPrice, createdAt: now, updatedAt: now });
-  e.target.reset();
-  updateHoldingQtyLabel();
+  closeHoldingForm();
   saveHoldings();
 });
 

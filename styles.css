@@ -366,6 +366,9 @@ input:focus, select:focus {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+.row-2.single-col {
+  grid-template-columns: 1fr;
+}
 
 .todo-toolbar {
   display: flex;

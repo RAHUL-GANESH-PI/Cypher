@@ -274,11 +274,19 @@
           </div>
         </div>
 
-        <form id="holding-form" class="card-form">
-          <div class="row-2">
-            <label class="field">
+        <div class="section-header">
+          <h2 class="section-title">Your Holdings</h2>
+          <button type="button" class="fab-btn" id="holding-add-toggle" title="Add a holding" aria-label="Add a holding">+</button>
+        </div>
+
+        <div id="holding-list" class="card-list"></div>
+        <p class="empty-state" id="holdings-empty" hidden>No holdings yet — tap + to add your first one.</p>
+
+        <form id="holding-form" class="card-form" hidden>
+          <div class="row-2" id="holding-row-1">
+            <label class="field" id="holding-name-field">
               <span>Asset name</span>
-              <input type="text" id="holding-name" placeholder="e.g. Reliance Industries" required maxlength="80">
+              <input type="text" id="holding-name" placeholder="e.g. Reliance Industries" maxlength="80">
             </label>
             <label class="field">
               <span>Type</span>
@@ -303,11 +311,11 @@
             <span>Current price / unit</span>
             <input type="number" id="holding-current" min="0" step="0.01" required placeholder="0.00">
           </label>
-          <button type="submit" class="btn primary small">Add Holding</button>
+          <div class="form-actions">
+            <button type="submit" class="btn primary small">Add Holding</button>
+            <button type="button" class="btn secondary small" id="holding-cancel">Cancel</button>
+          </div>
         </form>
-
-        <div id="holding-list" class="card-list"></div>
-        <p class="empty-state" id="holdings-empty" hidden>No holdings yet — add your first one above.</p>
       </div>
     </section>
 
