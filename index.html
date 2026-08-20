@@ -74,8 +74,34 @@
       <img src="icons/icon-192.png" alt="" class="brand-logo-sm">
       <span>Cypher</span>
     </div>
-    <button id="logout-btn" class="icon-btn" title="Lock Cypher">🔒</button>
+    <button id="data-btn" class="icon-btn" title="Export / Import data" aria-label="Export / Import data">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"></path>
+        <path d="M7 10l5 5 5-5"></path>
+        <path d="M4 19h16"></path>
+      </svg>
+    </button>
   </header>
+
+  <!-- Export / Import modal -->
+  <div id="data-modal" class="modal-overlay" hidden>
+    <div class="modal-card">
+      <button type="button" class="icon-btn modal-close" id="data-modal-close" aria-label="Close">✕</button>
+      <h2>Your Data</h2>
+      <p class="hint">Move your to-dos, goals, and finances to another device.</p>
+
+      <button type="button" class="btn primary" id="export-btn">Export All Data (.xlsx)</button>
+      <button type="button" class="btn secondary" id="import-btn">Import Data (.xlsx)</button>
+      <input type="file" id="import-file-input" accept=".xlsx" class="sr-date-input">
+
+      <p class="error" id="data-error" hidden></p>
+      <p class="hint-text" id="data-msg" hidden></p>
+      <p class="hint">
+        Note: this moves your data only. Fingerprint/Face unlock is tied to this device, so you'll set that up
+        fresh after importing on a new one.
+      </p>
+    </div>
+  </div>
 
   <nav class="tabs" role="tablist">
     <button class="tab-btn active" data-tab="todo">To-Do</button>
@@ -159,16 +185,6 @@
         <button class="subtab-btn" data-fsub="portfolio">Portfolio</button>
       </div>
 
-      <div class="currency-row">
-        <label for="currency-select">Currency</label>
-        <select id="currency-select">
-          <option value="₹">₹ INR</option>
-          <option value="$">$ USD</option>
-          <option value="€">€ EUR</option>
-          <option value="£">£ GBP</option>
-        </select>
-      </div>
-
       <!-- Transactions -->
       <div id="fsub-transactions" class="fsub-panel active">
         <div class="summary-row">
@@ -203,7 +219,20 @@
           <div class="row-2">
             <label class="field">
               <span>Category</span>
-              <input type="text" id="txn-category" placeholder="e.g. Salary, Food, Rent" required maxlength="60">
+              <select id="txn-category-select" hidden>
+                <option>Breakfast</option>
+                <option>Lunch</option>
+                <option>Dinner</option>
+                <option>Snacks</option>
+                <option>Juice</option>
+                <option>Fruits</option>
+                <option>Milk</option>
+                <option>Petrol</option>
+                <option>Friend's Outing</option>
+                <option>Movie</option>
+                <option>Other</option>
+              </select>
+              <input type="text" id="txn-category-text" placeholder="e.g. Salary, Freelance" required maxlength="60">
             </label>
             <label class="field">
               <span>Date</span>
@@ -216,6 +245,13 @@
           </label>
           <button type="submit" class="btn primary small">Add Transaction</button>
         </form>
+
+        <div class="filter-row" id="txn-filters">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="today">Today</button>
+          <button class="chip" data-filter="week">Last 7 Days</button>
+          <button class="chip" data-filter="month">This Month</button>
+        </div>
 
         <ul id="txn-list" class="list"></ul>
         <p class="empty-state" id="txn-empty" hidden>No transactions yet — add your first one above.</p>
@@ -269,6 +305,7 @@
 </div>
 
 <script src="qrcode.js"></script>
+<script src="xlsx.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

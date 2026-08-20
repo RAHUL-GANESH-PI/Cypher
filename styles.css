@@ -119,6 +119,15 @@ button, input, select, textarea { font-family: inherit; }
   margin: 0 0 16px;
 }
 
+.modal-card .btn {
+  margin-bottom: 10px;
+}
+
+.modal-card .hint {
+  text-align: left;
+  margin-top: 14px;
+}
+
 .brand-mark {
   text-align: center;
   margin-bottom: 22px;
@@ -660,17 +669,6 @@ input:focus, select:focus {
   cursor: pointer;
 }
 .subtab-btn.active { color: var(--text); border-color: var(--accent); }
-
-.currency-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  margin-bottom: 14px;
-}
-.currency-row select { width: auto; padding: 6px 10px; font-size: 13px; }
 
 .fsub-panel { display: none; }
 .fsub-panel.active { display: block; }

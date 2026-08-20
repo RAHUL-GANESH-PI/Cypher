@@ -168,11 +168,6 @@ document.getElementById('reset-btn').addEventListener('click', async () => {
   location.reload();
 });
 
-document.getElementById('logout-btn').addEventListener('click', () => {
-  sessionStorage.removeItem(SESSION_KEY);
-  location.reload();
-});
-
 function enterApp() {
   lockScreen.hidden = true;
   appScreen.hidden = false;
@@ -614,15 +609,8 @@ document.getElementById('goal-list').addEventListener('click', (e) => {
    FINANCE — transactions
    ========================================================= */
 let txns = Store.get('cypher_finance_transactions', []);
-let currency = Store.get('cypher_currency', '₹');
-
-document.getElementById('currency-select').value = currency;
-document.getElementById('currency-select').addEventListener('change', (e) => {
-  currency = e.target.value;
-  Store.set('cypher_currency', currency);
-  renderTxns();
-  renderHoldings();
-});
+const currency = '₹';
+let txnFilter = 'all';
 
 document.getElementById('txn-date').valueAsDate = new Date();
 
@@ -636,15 +624,43 @@ function fmtMoney(n) {
   return currency + num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function inTxnFilter(dateStr) {
+  if (txnFilter === 'all') return true;
+  const d = new Date(dateStr + 'T00:00:00');
+  const now = new Date();
+  if (txnFilter === 'today') return dateStr === todayStr();
+  if (txnFilter === 'week') {
+    const diffDays = Math.floor((now - d) / 86400000);
+    return diffDays >= 0 && diffDays < 7;
+  }
+  if (txnFilter === 'month') {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+  return true;
+}
+
+// Category is a fixed dropdown for expenses, free text for income (no preset "income categories" exist).
+function updateTxnCategoryField() {
+  const isExpense = document.getElementById('txn-type').value === 'expense';
+  document.getElementById('txn-category-select').hidden = !isExpense;
+  document.getElementById('txn-category-text').hidden = isExpense;
+  document.getElementById('txn-category-select').required = isExpense;
+  document.getElementById('txn-category-text').required = !isExpense;
+}
+document.getElementById('txn-type').addEventListener('change', updateTxnCategoryField);
+updateTxnCategoryField();
+
 function renderTxns() {
   const list = document.getElementById('txn-list');
   const empty = document.getElementById('txn-empty');
   list.innerHTML = '';
-  empty.hidden = txns.length !== 0;
+
+  const filtered = txns.filter((t) => inTxnFilter(t.date));
+  empty.hidden = filtered.length !== 0;
 
   let income = 0;
   let expense = 0;
-  txns.forEach((t) => {
+  filtered.forEach((t) => {
     if (t.type === 'income') income += Number(t.amount);
     else expense += Number(t.amount);
   });
@@ -653,7 +669,7 @@ function renderTxns() {
   document.getElementById('sum-expense').textContent = fmtMoney(expense);
   document.getElementById('sum-balance').textContent = fmtMoney(income - expense);
 
-  txns
+  filtered
     .slice()
     .sort((a, b) => (b.date > a.date ? 1 : -1) || b.createdAt - a.createdAt)
     .forEach((t) => {
@@ -675,7 +691,10 @@ document.getElementById('txn-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const type = document.getElementById('txn-type').value;
   const amount = parseFloat(document.getElementById('txn-amount').value);
-  const category = document.getElementById('txn-category').value.trim();
+  const category =
+    type === 'expense'
+      ? document.getElementById('txn-category-select').value
+      : document.getElementById('txn-category-text').value.trim();
   const date = document.getElementById('txn-date').value;
   const note = document.getElementById('txn-note').value.trim();
   if (!amount || amount < 0 || !category || !date) return;
@@ -683,6 +702,7 @@ document.getElementById('txn-form').addEventListener('submit', (e) => {
   txns.push({ id: uid(), type, amount, category, date, note, createdAt: Date.now() });
   e.target.reset();
   document.getElementById('txn-date').valueAsDate = new Date();
+  updateTxnCategoryField();
   saveTxns();
 });
 
@@ -692,6 +712,14 @@ document.getElementById('txn-list').addEventListener('click', (e) => {
     txns = txns.filter((t) => t.id !== delId);
     saveTxns();
   }
+});
+
+document.getElementById('txn-filters').addEventListener('click', (e) => {
+  if (!e.target.matches('.chip')) return;
+  document.querySelectorAll('#txn-filters .chip').forEach((c) => c.classList.remove('active'));
+  e.target.classList.add('active');
+  txnFilter = e.target.dataset.filter;
+  renderTxns();
 });
 
 /* =========================================================
@@ -774,6 +802,126 @@ document.getElementById('holding-list').addEventListener('click', (e) => {
   if (delId) {
     holdings = holdings.filter((h) => h.id !== delId);
     saveHoldings();
+  }
+});
+
+/* =========================================================
+   DATA — export / import (.xlsx), for moving to another device
+   ========================================================= */
+const DATA_SHEETS = [
+  { name: 'To-Do', key: 'cypher_todos', headers: ['ID', 'Date', 'Task', 'Done', 'Created At'] },
+  { name: 'Goals', key: 'cypher_goals', headers: ['ID', 'Title', 'Notes', 'Target Date', 'Progress', 'Created At'] },
+  { name: 'Transactions', key: 'cypher_finance_transactions', headers: ['ID', 'Type', 'Category', 'Amount', 'Date', 'Note', 'Created At'] },
+  { name: 'Portfolio', key: 'cypher_finance_portfolio', headers: ['ID', 'Name', 'Quantity', 'Buy Price', 'Current Price', 'Created At'] }
+];
+
+function itemToRow(sheetName, item) {
+  switch (sheetName) {
+    case 'To-Do':
+      return [item.id, item.date || '', item.text, item.done ? 'TRUE' : 'FALSE', item.createdAt];
+    case 'Goals':
+      return [item.id, item.title, item.notes || '', item.targetDate || '', item.progress, item.createdAt];
+    case 'Transactions':
+      return [item.id, item.type, item.category, item.amount, item.date, item.note || '', item.createdAt];
+    case 'Portfolio':
+      return [item.id, item.name, item.qty, item.buyPrice, item.currentPrice, item.createdAt];
+    default:
+      return [];
+  }
+}
+
+function rowToItem(sheetName, row) {
+  switch (sheetName) {
+    case 'To-Do':
+      return { id: String(row[0]), date: String(row[1] || ''), text: String(row[2] || ''), done: String(row[3]).toUpperCase() === 'TRUE', createdAt: Number(row[4]) || Date.now() };
+    case 'Goals':
+      return { id: String(row[0]), title: String(row[1] || ''), notes: String(row[2] || ''), targetDate: String(row[3] || ''), progress: Number(row[4]) || 0, createdAt: Number(row[5]) || Date.now() };
+    case 'Transactions':
+      return { id: String(row[0]), type: String(row[1]), category: String(row[2] || ''), amount: Number(row[3]) || 0, date: String(row[4] || ''), note: String(row[5] || ''), createdAt: Number(row[6]) || Date.now() };
+    case 'Portfolio':
+      return { id: String(row[0]), name: String(row[1] || ''), qty: Number(row[2]) || 0, buyPrice: Number(row[3]) || 0, currentPrice: Number(row[4]) || 0, createdAt: Number(row[5]) || Date.now() };
+    default:
+      return null;
+  }
+}
+
+function buildExportSheets() {
+  return DATA_SHEETS.map((s) => {
+    const items = Store.get(s.key, []);
+    const rows = [s.headers, ...items.map((item) => itemToRow(s.name, item))];
+    return { name: s.name, rows };
+  });
+}
+
+document.getElementById('data-btn').addEventListener('click', () => {
+  document.getElementById('data-error').hidden = true;
+  document.getElementById('data-msg').hidden = true;
+  document.getElementById('data-modal').hidden = false;
+});
+document.getElementById('data-modal-close').addEventListener('click', () => {
+  document.getElementById('data-modal').hidden = true;
+});
+document.getElementById('data-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'data-modal') document.getElementById('data-modal').hidden = true;
+});
+
+document.getElementById('export-btn').addEventListener('click', () => {
+  try {
+    const sheets = buildExportSheets();
+    const blob = Xlsx.buildWorkbook(sheets);
+    const stamp = todayStr();
+    Xlsx.download(blob, `Cypher-backup-${stamp}.xlsx`);
+    const msg = document.getElementById('data-msg');
+    msg.textContent = 'Export started — check your downloads.';
+    msg.hidden = false;
+    document.getElementById('data-error').hidden = true;
+  } catch (err) {
+    console.warn('Export failed:', err);
+    const errEl = document.getElementById('data-error');
+    errEl.textContent = 'Export failed. Please try again.';
+    errEl.hidden = false;
+  }
+});
+
+document.getElementById('import-btn').addEventListener('click', () => {
+  document.getElementById('import-file-input').click();
+});
+
+document.getElementById('import-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // allow re-selecting the same file later
+  if (!file) return;
+
+  const errEl = document.getElementById('data-error');
+  const msgEl = document.getElementById('data-msg');
+  errEl.hidden = true;
+  msgEl.hidden = true;
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const parsed = Xlsx.parseWorkbook(buffer);
+
+    const missing = DATA_SHEETS.filter((s) => !parsed[s.name]);
+    if (missing.length) {
+      throw new Error("This doesn't look like a Cypher export file.");
+    }
+
+    const sure = confirm(
+      'Importing will replace all current To-Do, Goals, Transaction, and Portfolio data on this device with the contents of this file. This cannot be undone. Continue?'
+    );
+    if (!sure) return;
+
+    DATA_SHEETS.forEach((s) => {
+      const rows = parsed[s.name].slice(1); // drop header row
+      const items = rows.filter((r) => r.length && r[0] !== '').map((r) => rowToItem(s.name, r));
+      Store.set(s.key, items);
+    });
+
+    location.reload();
+  } catch (err) {
+    console.warn('Import failed:', err);
+    errEl.textContent = err.message || 'Could not read that file. Make sure it\'s a .xlsx file exported from Cypher.';
+    errEl.hidden = false;
   }
 });
 
