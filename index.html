@@ -277,17 +277,21 @@
         <form id="holding-form" class="card-form">
           <div class="row-2">
             <label class="field">
-              <span>Stock name</span>
+              <span>Asset name</span>
               <input type="text" id="holding-name" placeholder="e.g. Reliance Industries" required maxlength="80">
             </label>
             <label class="field">
-              <span>NSE symbol (optional)</span>
-              <input type="text" id="holding-symbol" placeholder="e.g. RELIANCE" maxlength="20">
+              <span>Type</span>
+              <select id="holding-type">
+                <option value="Stock">Stock</option>
+                <option value="Gold">Gold</option>
+                <option value="Real Estate">Real Estate</option>
+              </select>
             </label>
           </div>
           <div class="row-2">
             <label class="field">
-              <span>Quantity</span>
+              <span id="holding-qty-label">Quantity</span>
               <input type="number" id="holding-qty" min="0" step="0.0001" required placeholder="0">
             </label>
             <label class="field">

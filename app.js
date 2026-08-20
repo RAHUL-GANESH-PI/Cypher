@@ -665,9 +665,9 @@ function renderTxns() {
     else expense += Number(t.amount);
   });
 
-  document.getElementById('sum-income').textContent = fmtMoney(income);
-  document.getElementById('sum-expense').textContent = fmtMoney(expense);
-  document.getElementById('sum-balance').textContent = fmtMoney(income - expense);
+  setStatValue('sum-income', fmtMoney(income));
+  setStatValue('sum-expense', fmtMoney(expense));
+  setStatValue('sum-balance', fmtMoney(income - expense));
 
   filtered
     .slice()
@@ -749,11 +749,11 @@ function renderHoldings() {
   const gain = current - invested;
   const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
 
-  document.getElementById('sum-invested').textContent = fmtMoney(invested);
-  document.getElementById('sum-current').textContent = fmtMoney(current);
-  const gainEl = document.getElementById('sum-gain');
-  gainEl.textContent = `${gain >= 0 ? '+' : ''}${fmtMoney(gain)} (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)`;
-  gainEl.className = 'summary-value ' + (gain >= 0 ? 'gain-positive' : 'gain-negative');
+  setStatValue('sum-invested', fmtMoney(invested));
+  setStatValue('sum-current', fmtMoney(current));
+  setStatValue('sum-gain', `${gain >= 0 ? '+' : ''}${fmtMoney(gain)} (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)`);
+  document.getElementById('sum-gain').classList.toggle('gain-positive', gain >= 0);
+  document.getElementById('sum-gain').classList.toggle('gain-negative', gain < 0);
 
   holdings
     .slice()
@@ -764,7 +764,10 @@ function renderHoldings() {
       const g = value - cost;
       const gPct = cost > 0 ? (g / cost) * 100 : 0;
       const updatedAt = h.updatedAt || h.createdAt;
-      const nseUrl = h.symbol ? `https://www.nseindia.com/get-quotes/equity?symbol=${encodeURIComponent(h.symbol.toUpperCase())}` : null;
+      const isGold = h.type === 'Gold';
+      const qtyLabel = isGold ? 'Grams' : 'Qty';
+      const editQtyLabel = isGold ? 'Edit Grams' : 'Edit Units';
+      const qtyPlaceholder = isGold ? 'New grams' : 'New quantity';
 
       const card = document.createElement('div');
       card.className = 'item-card';
@@ -772,12 +775,12 @@ function renderHoldings() {
         <div class="item-card-head">
           <div>
             <div class="item-card-title">${escapeHtml(h.name)}</div>
-            <div class="item-card-meta">${h.symbol ? `NSE: ${escapeHtml(h.symbol.toUpperCase())} · ` : ''}Price updated ${formatDateTime(updatedAt)}</div>
+            <div class="item-card-meta">${escapeHtml(h.type || 'Stock')} · Price updated ${formatDateTime(updatedAt)}</div>
           </div>
           <button class="item-delete" data-id="${h.id}" title="Delete">🗑</button>
         </div>
         <div class="holding-stats">
-          <div>Qty: <b>${h.qty}</b></div>
+          <div>${qtyLabel}: <b>${h.qty}</b></div>
           <div>Buy price: <b>${fmtMoney(h.buyPrice)}</b></div>
           <div>Current price: <b>${fmtMoney(h.currentPrice)}</b></div>
           <div>Value: <b>${fmtMoney(value)}</b></div>
@@ -786,38 +789,54 @@ function renderHoldings() {
           </div>
         </div>
         <div class="holding-actions">
-          ${nseUrl ? `<a href="${nseUrl}" target="_blank" rel="noopener noreferrer" class="chip">Check NSE Price ↗</a>` : ''}
           <button type="button" class="chip update-price-btn" data-id="${h.id}">Update Price</button>
+          <button type="button" class="chip update-qty-btn" data-id="${h.id}">${editQtyLabel}</button>
         </div>
         <form class="update-price-form" data-id="${h.id}" hidden>
           <input type="number" class="update-price-input" min="0" step="0.01" placeholder="New current price" required>
           <button type="submit" class="btn primary small">Save</button>
           <button type="button" class="btn secondary small cancel-update-price" data-id="${h.id}">Cancel</button>
         </form>
+        <form class="update-qty-form" data-id="${h.id}" hidden>
+          <input type="number" class="update-qty-input" min="0" step="0.0001" placeholder="${qtyPlaceholder}" required>
+          <button type="submit" class="btn primary small">Save</button>
+          <button type="button" class="btn secondary small cancel-update-qty" data-id="${h.id}">Cancel</button>
+        </form>
       `;
       list.appendChild(card);
     });
 }
 
+function updateHoldingQtyLabel() {
+  const isGold = document.getElementById('holding-type').value === 'Gold';
+  document.getElementById('holding-qty-label').textContent = isGold ? 'Grams' : 'Quantity';
+  document.getElementById('holding-qty').placeholder = isGold ? '0 (grams)' : '0';
+}
+document.getElementById('holding-type').addEventListener('change', updateHoldingQtyLabel);
+updateHoldingQtyLabel();
+
 document.getElementById('holding-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const name = document.getElementById('holding-name').value.trim();
-  const symbol = document.getElementById('holding-symbol').value.trim();
+  const type = document.getElementById('holding-type').value;
   const qty = parseFloat(document.getElementById('holding-qty').value);
   const buyPrice = parseFloat(document.getElementById('holding-buy').value);
   const currentPrice = parseFloat(document.getElementById('holding-current').value);
   if (!name || isNaN(qty) || isNaN(buyPrice) || isNaN(currentPrice)) return;
 
   const now = Date.now();
-  holdings.push({ id: uid(), name, symbol, qty, buyPrice, currentPrice, createdAt: now, updatedAt: now });
+  holdings.push({ id: uid(), name, type, qty, buyPrice, currentPrice, createdAt: now, updatedAt: now });
   e.target.reset();
+  updateHoldingQtyLabel();
   saveHoldings();
 });
 
 document.getElementById('holding-list').addEventListener('click', (e) => {
   const delId = e.target.matches('.item-delete') && e.target.dataset.id;
-  const updateBtn = e.target.closest('.update-price-btn');
-  const cancelBtn = e.target.closest('.cancel-update-price');
+  const updatePriceBtn = e.target.closest('.update-price-btn');
+  const cancelPriceBtn = e.target.closest('.cancel-update-price');
+  const updateQtyBtn = e.target.closest('.update-qty-btn');
+  const cancelQtyBtn = e.target.closest('.cancel-update-qty');
 
   if (delId) {
     holdings = holdings.filter((h) => h.id !== delId);
@@ -825,33 +844,61 @@ document.getElementById('holding-list').addEventListener('click', (e) => {
     return;
   }
 
-  if (updateBtn) {
-    const card = updateBtn.closest('.item-card');
+  if (updatePriceBtn) {
+    const card = updatePriceBtn.closest('.item-card');
     const form = card.querySelector('.update-price-form');
-    const h = holdings.find((x) => x.id === updateBtn.dataset.id);
+    const h = holdings.find((x) => x.id === updatePriceBtn.dataset.id);
     form.querySelector('.update-price-input').value = h ? h.currentPrice : '';
     form.hidden = false;
     form.querySelector('.update-price-input').focus();
     return;
   }
+  if (cancelPriceBtn) {
+    cancelPriceBtn.closest('.update-price-form').hidden = true;
+    return;
+  }
 
-  if (cancelBtn) {
-    cancelBtn.closest('.update-price-form').hidden = true;
+  if (updateQtyBtn) {
+    const card = updateQtyBtn.closest('.item-card');
+    const form = card.querySelector('.update-qty-form');
+    const h = holdings.find((x) => x.id === updateQtyBtn.dataset.id);
+    form.querySelector('.update-qty-input').value = h ? h.qty : '';
+    form.hidden = false;
+    form.querySelector('.update-qty-input').focus();
+    return;
+  }
+  if (cancelQtyBtn) {
+    cancelQtyBtn.closest('.update-qty-form').hidden = true;
   }
 });
 
 document.getElementById('holding-list').addEventListener('submit', (e) => {
-  if (!e.target.matches('.update-price-form')) return;
-  e.preventDefault();
-  const id = e.target.dataset.id;
-  const newPrice = parseFloat(e.target.querySelector('.update-price-input').value);
-  if (isNaN(newPrice) || newPrice < 0) return;
+  if (e.target.matches('.update-price-form')) {
+    e.preventDefault();
+    const id = e.target.dataset.id;
+    const newPrice = parseFloat(e.target.querySelector('.update-price-input').value);
+    if (isNaN(newPrice) || newPrice < 0) return;
 
-  const h = holdings.find((x) => x.id === id);
-  if (h) {
-    h.currentPrice = newPrice;
-    h.updatedAt = Date.now();
-    saveHoldings();
+    const h = holdings.find((x) => x.id === id);
+    if (h) {
+      h.currentPrice = newPrice;
+      h.updatedAt = Date.now();
+      saveHoldings();
+    }
+    return;
+  }
+
+  if (e.target.matches('.update-qty-form')) {
+    e.preventDefault();
+    const id = e.target.dataset.id;
+    const newQty = parseFloat(e.target.querySelector('.update-qty-input').value);
+    if (isNaN(newQty) || newQty < 0) return;
+
+    const h = holdings.find((x) => x.id === id);
+    if (h) {
+      h.qty = newQty;
+      saveHoldings();
+    }
   }
 });
 
@@ -862,7 +909,7 @@ const DATA_SHEETS = [
   { name: 'To-Do', key: 'cypher_todos', headers: ['ID', 'Date', 'Task', 'Done', 'Created At'] },
   { name: 'Goals', key: 'cypher_goals', headers: ['ID', 'Title', 'Notes', 'Target Date', 'Progress', 'Created At'] },
   { name: 'Transactions', key: 'cypher_finance_transactions', headers: ['ID', 'Type', 'Category', 'Amount', 'Date', 'Note', 'Created At'] },
-  { name: 'Portfolio', key: 'cypher_finance_portfolio', headers: ['ID', 'Name', 'NSE Symbol', 'Quantity', 'Buy Price', 'Current Price', 'Created At', 'Price Updated At'] }
+  { name: 'Portfolio', key: 'cypher_finance_portfolio', headers: ['ID', 'Name', 'Type', 'Quantity', 'Buy Price', 'Current Price', 'Created At', 'Price Updated At'] }
 ];
 
 function itemToRow(sheetName, item) {
@@ -874,7 +921,7 @@ function itemToRow(sheetName, item) {
     case 'Transactions':
       return [item.id, item.type, item.category, item.amount, item.date, item.note || '', item.createdAt];
     case 'Portfolio':
-      return [item.id, item.name, item.symbol || '', item.qty, item.buyPrice, item.currentPrice, item.createdAt, item.updatedAt || item.createdAt];
+      return [item.id, item.name, item.type || 'Stock', item.qty, item.buyPrice, item.currentPrice, item.createdAt, item.updatedAt || item.createdAt];
     default:
       return [];
   }
@@ -890,7 +937,7 @@ function rowToItem(sheetName, row) {
       return { id: String(row[0]), type: String(row[1]), category: String(row[2] || ''), amount: Number(row[3]) || 0, date: String(row[4] || ''), note: String(row[5] || ''), createdAt: Number(row[6]) || Date.now() };
     case 'Portfolio': {
       const createdAt = Number(row[6]) || Date.now();
-      return { id: String(row[0]), name: String(row[1] || ''), symbol: String(row[2] || ''), qty: Number(row[3]) || 0, buyPrice: Number(row[4]) || 0, currentPrice: Number(row[5]) || 0, createdAt, updatedAt: Number(row[7]) || createdAt };
+      return { id: String(row[0]), name: String(row[1] || ''), type: String(row[2] || 'Stock'), qty: Number(row[3]) || 0, buyPrice: Number(row[4]) || 0, currentPrice: Number(row[5]) || 0, createdAt, updatedAt: Number(row[7]) || createdAt };
     }
     default:
       return null;
@@ -980,6 +1027,18 @@ document.getElementById('import-file-input').addEventListener('change', async (e
 /* =========================================================
    UTILITIES
    ========================================================= */
+
+// Sets a summary-card number and shrinks its font as the text gets longer,
+// so large values (7+ digit portfolio totals, etc.) stay on one line instead
+// of wrapping mid-number.
+function setStatValue(id, text) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.classList.toggle('stat-compact', text.length > 11 && text.length <= 15);
+  el.classList.toggle('stat-tiny', text.length > 15 && text.length <= 19);
+  el.classList.toggle('stat-xtiny', text.length > 19);
+}
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
