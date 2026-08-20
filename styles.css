@@ -468,6 +468,21 @@ input:focus, select:focus {
   transition: opacity 0.15s;
 }
 
+.item-card.dragging {
+  position: relative;
+  z-index: 20;
+  background: var(--card-hover);
+  box-shadow: var(--shadow);
+  cursor: grabbing;
+  transition: none;
+  user-select: none;
+}
+
+#loan-list.reordering .item-card:not(.dragging) {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
 .list-item input[type="checkbox"] {
   width: 20px;
   height: 20px;
@@ -582,6 +597,13 @@ input:focus, select:focus {
   align-items: flex-start;
   gap: 10px;
   margin-bottom: 6px;
+}
+
+.item-card-head-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
 }
 
 .item-card-title { font-weight: 700; font-size: 15px; }

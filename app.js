@@ -586,10 +586,8 @@ function renderLoans() {
   setStatValue('sum-paid', fmtMoney(paid));
   document.getElementById('sum-paid-pct').textContent = `${paidPct.toFixed(1)}% paid`;
 
-  loans
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .forEach((l) => {
+  // Displayed in stored array order (not re-sorted by date) so drag-reordering below sticks.
+  loans.forEach((l) => {
       const interest = l.interest || 0;
       const loanPaid = l.amount - l.remaining;
       const loanPaidPct = l.amount > 0 ? (loanPaid / l.amount) * 100 : 0;
@@ -597,11 +595,21 @@ function renderLoans() {
 
       const card = document.createElement('div');
       card.className = 'item-card';
+      card.dataset.id = l.id;
       card.innerHTML = `
         <div class="item-card-head">
-          <div>
-            <div class="item-card-title">${escapeHtml(l.lender)}</div>
-            <div class="item-card-meta">${l.note ? escapeHtml(l.note) + ' · ' : ''}Updated ${formatDateTime(updatedAt)}</div>
+          <div class="item-card-head-left">
+            <button type="button" class="drag-handle" data-id="${l.id}" aria-label="Drag to reorder" title="Drag to reorder">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle>
+                <circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle>
+                <circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle>
+              </svg>
+            </button>
+            <div>
+              <div class="item-card-title">${escapeHtml(l.lender)}</div>
+              <div class="item-card-meta">${l.note ? escapeHtml(l.note) + ' · ' : ''}Updated ${formatDateTime(updatedAt)}</div>
+            </div>
           </div>
           <button class="item-delete" data-id="${l.id}" title="Delete">🗑</button>
         </div>
@@ -628,6 +636,83 @@ function renderLoans() {
       `;
       list.appendChild(card);
     });
+}
+
+function moveLoanToIndex(id, newIndex) {
+  const curIndex = loans.findIndex((l) => l.id === id);
+  if (curIndex === -1) return;
+  newIndex = Math.max(0, Math.min(loans.length - 1, newIndex));
+  if (newIndex === curIndex) return;
+  const [item] = loans.splice(curIndex, 1);
+  loans.splice(newIndex, 0, item);
+  saveLoans();
+}
+
+/* ---------- drag-to-reorder for loans (same pointer-based approach as To-Do) ---------- */
+let loanDrag = null;
+
+document.getElementById('loan-list').addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('.drag-handle');
+  if (!handle) return;
+  e.preventDefault();
+
+  const card = handle.closest('.item-card');
+  const listEl = document.getElementById('loan-list');
+  const siblingRects = Array.from(listEl.querySelectorAll('.item-card'))
+    .filter((el) => el !== card)
+    .map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, height: r.height };
+    });
+
+  loanDrag = {
+    id: handle.dataset.id,
+    card,
+    startY: e.clientY,
+    startRect: card.getBoundingClientRect(),
+    siblingRects
+  };
+
+  card.classList.add('dragging');
+  listEl.classList.add('reordering');
+  try {
+    handle.setPointerCapture(e.pointerId);
+  } catch {
+    /* synthetic/unsupported pointer — dragging still works via document listeners */
+  }
+
+  document.addEventListener('pointermove', onLoanDragMove);
+  document.addEventListener('pointerup', onLoanDragEnd);
+  document.addEventListener('pointercancel', onLoanDragEnd);
+});
+
+function onLoanDragMove(e) {
+  if (!loanDrag) return;
+  const dy = e.clientY - loanDrag.startY;
+  loanDrag.card.style.transform = `translateY(${dy}px)`;
+}
+
+function onLoanDragEnd(e) {
+  if (!loanDrag) return;
+  const dy = e.clientY - loanDrag.startY;
+  const draggedCenter = loanDrag.startRect.top + dy + loanDrag.startRect.height / 2;
+
+  let newPos = 0;
+  loanDrag.siblingRects.forEach((s) => {
+    if (s.top + s.height / 2 < draggedCenter) newPos++;
+  });
+
+  loanDrag.card.classList.remove('dragging');
+  loanDrag.card.style.transform = '';
+  document.getElementById('loan-list').classList.remove('reordering');
+
+  document.removeEventListener('pointermove', onLoanDragMove);
+  document.removeEventListener('pointerup', onLoanDragEnd);
+  document.removeEventListener('pointercancel', onLoanDragEnd);
+
+  const id = loanDrag.id;
+  loanDrag = null;
+  moveLoanToIndex(id, newPos);
 }
 
 const loanForm = document.getElementById('loan-form');
