@@ -220,13 +220,19 @@ document.getElementById('qr-copy-btn').addEventListener('click', async () => {
 /* =========================================================
    TAB NAVIGATION
    ========================================================= */
+const TAB_ORDER = ['todo', 'finance', 'goals'];
+
+function switchToTab(name) {
+  const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  if (!btn) return;
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
 document.querySelectorAll('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-  });
+  btn.addEventListener('click', () => switchToTab(btn.dataset.tab));
 });
 
 document.querySelectorAll('.subtab-btn').forEach((btn) => {
@@ -237,6 +243,43 @@ document.querySelectorAll('.subtab-btn').forEach((btn) => {
     document.getElementById('fsub-' + btn.dataset.fsub).classList.add('active');
   });
 });
+
+/* ---------- swipe between To-Do / Finance / Goals ---------- */
+// touch-action: pan-y (set in CSS) leaves vertical scrolling to the browser
+// natively and only hands horizontal gestures to us, so this can't break
+// scrolling inside any tab's list.
+(() => {
+  const content = document.querySelector('.tab-content');
+  let startX = null;
+  let startY = null;
+  let tracking = false;
+
+  content.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.drag-handle')) return; // don't fight the to-do drag-reorder gesture
+    startX = e.clientX;
+    startY = e.clientY;
+    tracking = true;
+  });
+
+  function endSwipe(e) {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    // require a clearly horizontal, deliberate drag — not a tap, not a vertical scroll
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+
+    const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+    const idx = TAB_ORDER.indexOf(activeTab);
+    if (dx < 0 && idx < TAB_ORDER.length - 1) switchToTab(TAB_ORDER[idx + 1]); // swipe left -> next
+    else if (dx > 0 && idx > 0) switchToTab(TAB_ORDER[idx - 1]); // swipe right -> previous
+  }
+
+  content.addEventListener('pointerup', endSwipe);
+  content.addEventListener('pointercancel', () => {
+    tracking = false;
+  });
+})();
 
 /* =========================================================
    TO-DO
@@ -751,15 +794,13 @@ function renderHoldings() {
 
   setStatValue('sum-invested', fmtMoney(invested));
   setStatValue('sum-current', fmtMoney(current));
-  // Gain/Loss keeps its original full size (not the shrink-to-fit sizing used
-  // above) — it always includes a "(+x.x%)" suffix, which made it look small
-  // even for everyday values. Long text still won't wrap thanks to the base
-  // .summary-value nowrap + ellipsis rule.
-  const gainEl = document.getElementById('sum-gain');
-  gainEl.textContent = `${gain >= 0 ? '+' : ''}${fmtMoney(gain)} (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)`;
-  gainEl.classList.remove('stat-compact', 'stat-tiny', 'stat-xtiny');
-  gainEl.classList.toggle('gain-positive', gain >= 0);
-  gainEl.classList.toggle('gain-negative', gain < 0);
+  // The percentage now sits on its own line below the amount, so the amount
+  // itself is just a plain currency string like Invested/Current — sized
+  // with the same shrink-to-fit rule for visual consistency between them.
+  setStatValue('sum-gain', `${gain >= 0 ? '+' : ''}${fmtMoney(gain)}`);
+  document.getElementById('sum-gain-pct').textContent = `${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%`;
+  document.getElementById('sum-gain-card').classList.toggle('gain-positive', gain >= 0);
+  document.getElementById('sum-gain-card').classList.toggle('gain-negative', gain < 0);
 
   holdings
     .slice()
@@ -870,6 +911,26 @@ holdingForm.addEventListener('submit', (e) => {
   if (!name || isNaN(qty) || isNaN(buyPrice) || isNaN(currentPrice)) return;
 
   const now = Date.now();
+
+  // Gold is fungible — grams bought this week are no different from grams
+  // bought last month — so repeated additions merge into one holding using a
+  // quantity-weighted average buy price, instead of piling up duplicate rows.
+  // (Real Estate isn't merged: two properties are genuinely different assets,
+  // even though neither has a name field to tell them apart by.)
+  if (type === 'Gold') {
+    const existing = holdings.find((h) => h.type === 'Gold');
+    if (existing) {
+      const totalQty = existing.qty + qty;
+      existing.buyPrice = (existing.qty * existing.buyPrice + qty * buyPrice) / totalQty;
+      existing.qty = totalQty;
+      existing.currentPrice = currentPrice;
+      existing.updatedAt = now;
+      closeHoldingForm();
+      saveHoldings();
+      return;
+    }
+  }
+
   holdings.push({ id: uid(), name, type, qty, buyPrice, currentPrice, createdAt: now, updatedAt: now });
   closeHoldingForm();
   saveHoldings();

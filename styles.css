@@ -339,6 +339,7 @@ input:focus, select:focus {
   max-width: 640px;
   margin: 0 auto;
   padding: 18px 16px 60px;
+  touch-action: pan-y;
 }
 
 .tab-panel { display: none; }
@@ -732,6 +733,18 @@ input:focus, select:focus {
 .summary-value.stat-xtiny { font-size: 9px; letter-spacing: -0.2px; }
 .summary-card.income .summary-value { color: var(--success); }
 .summary-card.expense .summary-value { color: var(--danger); }
+
+.summary-subvalue {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+#sum-gain-card.gain-positive .summary-value,
+#sum-gain-card.gain-positive .summary-subvalue { color: var(--success); }
+#sum-gain-card.gain-negative .summary-value,
+#sum-gain-card.gain-negative .summary-subvalue { color: var(--danger); }
 
 .empty-state {
   text-align: center;
