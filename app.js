@@ -635,10 +635,16 @@ const loanAddToggle = document.getElementById('loan-add-toggle');
 const loanLenderInput = document.getElementById('loan-lender');
 const loanLenderWarning = document.getElementById('loan-lender-warning');
 
+// Lender names must be unique — this both warns live as you type and blocks
+// submission, rather than silently allowing a second loan under the same name.
+function loanLenderTaken(name) {
+  const normalized = name.trim().toLowerCase();
+  return normalized && loans.some((l) => l.lender.trim().toLowerCase() === normalized);
+}
+
 function checkLoanLenderExists() {
-  const name = loanLenderInput.value.trim().toLowerCase();
-  const exists = name && loans.some((l) => l.lender.trim().toLowerCase() === name);
-  loanLenderWarning.textContent = exists ? `You already have a loan from "${loanLenderInput.value.trim()}". This will add a separate loan.` : '';
+  const exists = loanLenderTaken(loanLenderInput.value);
+  loanLenderWarning.textContent = exists ? `A loan named "${loanLenderInput.value.trim()}" already exists. Loan names must be unique.` : '';
   loanLenderWarning.hidden = !exists;
 }
 loanLenderInput.addEventListener('input', checkLoanLenderExists);
@@ -671,6 +677,12 @@ loanForm.addEventListener('submit', (e) => {
   const amount = parseFloat(document.getElementById('loan-amount').value);
   const note = document.getElementById('loan-note').value.trim();
   if (!lender || isNaN(amount) || amount < 0) return;
+
+  if (loanLenderTaken(lender)) {
+    checkLoanLenderExists();
+    loanLenderInput.focus();
+    return;
+  }
 
   const now = Date.now();
   loans.push({ id: uid(), lender, amount, remaining: amount, interest: 0, note, createdAt: now, updatedAt: now });
