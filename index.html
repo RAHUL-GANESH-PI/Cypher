@@ -275,10 +275,16 @@
         </div>
 
         <form id="holding-form" class="card-form">
-          <label class="field">
-            <span>Asset name</span>
-            <input type="text" id="holding-name" placeholder="e.g. NIFTY 50 ETF, Gold, AAPL" required maxlength="80">
-          </label>
+          <div class="row-2">
+            <label class="field">
+              <span>Stock name</span>
+              <input type="text" id="holding-name" placeholder="e.g. Reliance Industries" required maxlength="80">
+            </label>
+            <label class="field">
+              <span>NSE symbol (optional)</span>
+              <input type="text" id="holding-symbol" placeholder="e.g. RELIANCE" maxlength="20">
+            </label>
+          </div>
           <div class="row-2">
             <label class="field">
               <span>Quantity</span>

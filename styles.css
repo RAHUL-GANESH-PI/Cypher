@@ -651,6 +651,31 @@ input:focus, select:focus {
 .gain-positive { color: var(--success) !important; }
 .gain-negative { color: var(--danger) !important; }
 
+.holding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.holding-actions .chip {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.update-price-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.update-price-form input {
+  flex: 1;
+}
+.update-price-form .btn {
+  width: auto;
+  white-space: nowrap;
+}
+
 /* ---------- FINANCE ---------- */
 .finance-subtabs {
   display: flex;

@@ -763,11 +763,17 @@ function renderHoldings() {
       const cost = h.qty * h.buyPrice;
       const g = value - cost;
       const gPct = cost > 0 ? (g / cost) * 100 : 0;
+      const updatedAt = h.updatedAt || h.createdAt;
+      const nseUrl = h.symbol ? `https://www.nseindia.com/get-quotes/equity?symbol=${encodeURIComponent(h.symbol.toUpperCase())}` : null;
+
       const card = document.createElement('div');
       card.className = 'item-card';
       card.innerHTML = `
         <div class="item-card-head">
-          <div class="item-card-title">${escapeHtml(h.name)}</div>
+          <div>
+            <div class="item-card-title">${escapeHtml(h.name)}</div>
+            <div class="item-card-meta">${h.symbol ? `NSE: ${escapeHtml(h.symbol.toUpperCase())} · ` : ''}Price updated ${formatDateTime(updatedAt)}</div>
+          </div>
           <button class="item-delete" data-id="${h.id}" title="Delete">🗑</button>
         </div>
         <div class="holding-stats">
@@ -779,6 +785,15 @@ function renderHoldings() {
             Gain/Loss: <b>${g >= 0 ? '+' : ''}${fmtMoney(g)} (${g >= 0 ? '+' : ''}${gPct.toFixed(1)}%)</b>
           </div>
         </div>
+        <div class="holding-actions">
+          ${nseUrl ? `<a href="${nseUrl}" target="_blank" rel="noopener noreferrer" class="chip">Check NSE Price ↗</a>` : ''}
+          <button type="button" class="chip update-price-btn" data-id="${h.id}">Update Price</button>
+        </div>
+        <form class="update-price-form" data-id="${h.id}" hidden>
+          <input type="number" class="update-price-input" min="0" step="0.01" placeholder="New current price" required>
+          <button type="submit" class="btn primary small">Save</button>
+          <button type="button" class="btn secondary small cancel-update-price" data-id="${h.id}">Cancel</button>
+        </form>
       `;
       list.appendChild(card);
     });
@@ -787,20 +802,55 @@ function renderHoldings() {
 document.getElementById('holding-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const name = document.getElementById('holding-name').value.trim();
+  const symbol = document.getElementById('holding-symbol').value.trim();
   const qty = parseFloat(document.getElementById('holding-qty').value);
   const buyPrice = parseFloat(document.getElementById('holding-buy').value);
   const currentPrice = parseFloat(document.getElementById('holding-current').value);
   if (!name || isNaN(qty) || isNaN(buyPrice) || isNaN(currentPrice)) return;
 
-  holdings.push({ id: uid(), name, qty, buyPrice, currentPrice, createdAt: Date.now() });
+  const now = Date.now();
+  holdings.push({ id: uid(), name, symbol, qty, buyPrice, currentPrice, createdAt: now, updatedAt: now });
   e.target.reset();
   saveHoldings();
 });
 
 document.getElementById('holding-list').addEventListener('click', (e) => {
   const delId = e.target.matches('.item-delete') && e.target.dataset.id;
+  const updateBtn = e.target.closest('.update-price-btn');
+  const cancelBtn = e.target.closest('.cancel-update-price');
+
   if (delId) {
     holdings = holdings.filter((h) => h.id !== delId);
+    saveHoldings();
+    return;
+  }
+
+  if (updateBtn) {
+    const card = updateBtn.closest('.item-card');
+    const form = card.querySelector('.update-price-form');
+    const h = holdings.find((x) => x.id === updateBtn.dataset.id);
+    form.querySelector('.update-price-input').value = h ? h.currentPrice : '';
+    form.hidden = false;
+    form.querySelector('.update-price-input').focus();
+    return;
+  }
+
+  if (cancelBtn) {
+    cancelBtn.closest('.update-price-form').hidden = true;
+  }
+});
+
+document.getElementById('holding-list').addEventListener('submit', (e) => {
+  if (!e.target.matches('.update-price-form')) return;
+  e.preventDefault();
+  const id = e.target.dataset.id;
+  const newPrice = parseFloat(e.target.querySelector('.update-price-input').value);
+  if (isNaN(newPrice) || newPrice < 0) return;
+
+  const h = holdings.find((x) => x.id === id);
+  if (h) {
+    h.currentPrice = newPrice;
+    h.updatedAt = Date.now();
     saveHoldings();
   }
 });
@@ -812,7 +862,7 @@ const DATA_SHEETS = [
   { name: 'To-Do', key: 'cypher_todos', headers: ['ID', 'Date', 'Task', 'Done', 'Created At'] },
   { name: 'Goals', key: 'cypher_goals', headers: ['ID', 'Title', 'Notes', 'Target Date', 'Progress', 'Created At'] },
   { name: 'Transactions', key: 'cypher_finance_transactions', headers: ['ID', 'Type', 'Category', 'Amount', 'Date', 'Note', 'Created At'] },
-  { name: 'Portfolio', key: 'cypher_finance_portfolio', headers: ['ID', 'Name', 'Quantity', 'Buy Price', 'Current Price', 'Created At'] }
+  { name: 'Portfolio', key: 'cypher_finance_portfolio', headers: ['ID', 'Name', 'NSE Symbol', 'Quantity', 'Buy Price', 'Current Price', 'Created At', 'Price Updated At'] }
 ];
 
 function itemToRow(sheetName, item) {
@@ -824,7 +874,7 @@ function itemToRow(sheetName, item) {
     case 'Transactions':
       return [item.id, item.type, item.category, item.amount, item.date, item.note || '', item.createdAt];
     case 'Portfolio':
-      return [item.id, item.name, item.qty, item.buyPrice, item.currentPrice, item.createdAt];
+      return [item.id, item.name, item.symbol || '', item.qty, item.buyPrice, item.currentPrice, item.createdAt, item.updatedAt || item.createdAt];
     default:
       return [];
   }
@@ -838,8 +888,10 @@ function rowToItem(sheetName, row) {
       return { id: String(row[0]), title: String(row[1] || ''), notes: String(row[2] || ''), targetDate: String(row[3] || ''), progress: Number(row[4]) || 0, createdAt: Number(row[5]) || Date.now() };
     case 'Transactions':
       return { id: String(row[0]), type: String(row[1]), category: String(row[2] || ''), amount: Number(row[3]) || 0, date: String(row[4] || ''), note: String(row[5] || ''), createdAt: Number(row[6]) || Date.now() };
-    case 'Portfolio':
-      return { id: String(row[0]), name: String(row[1] || ''), qty: Number(row[2]) || 0, buyPrice: Number(row[3]) || 0, currentPrice: Number(row[4]) || 0, createdAt: Number(row[5]) || Date.now() };
+    case 'Portfolio': {
+      const createdAt = Number(row[6]) || Date.now();
+      return { id: String(row[0]), name: String(row[1] || ''), symbol: String(row[2] || ''), qty: Number(row[3]) || 0, buyPrice: Number(row[4]) || 0, currentPrice: Number(row[5]) || 0, createdAt, updatedAt: Number(row[7]) || createdAt };
+    }
     default:
       return null;
   }
@@ -939,6 +991,16 @@ function formatDate(iso) {
   const d = new Date(iso + 'T00:00:00');
   if (isNaN(d)) return iso;
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatDateTime(ms) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  if (isNaN(d)) return '';
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return isToday ? `today, ${time}` : `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
 /* =========================================================
